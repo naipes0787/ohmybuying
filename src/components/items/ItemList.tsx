@@ -6,9 +6,10 @@ interface ItemListProps {
   items: ListItemWithDetail[];
   onReorder: (result: DropResult) => void;
   onRemove: (itemId: string) => void;
+  onEdit: (itemId: string) => void;
 }
 
-export function ItemList({ items, onReorder, onRemove }: ItemListProps) {
+export function ItemList({ items, onReorder, onRemove, onEdit }: ItemListProps) {
   return (
     <DragDropContext onDragEnd={onReorder}>
       <Droppable droppableId="list-items">
@@ -26,6 +27,7 @@ export function ItemList({ items, onReorder, onRemove }: ItemListProps) {
                 listItem={listItem}
                 index={index}
                 onRemove={onRemove}
+                onEdit={onEdit}
               />
             ))}
             {provided.placeholder}

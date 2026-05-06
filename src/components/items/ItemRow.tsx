@@ -1,22 +1,27 @@
 import { memo, useCallback } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
-import { GripVertical, Trash2 } from 'lucide-react';
+import { Bell, GripVertical, Pencil, Trash2 } from 'lucide-react';
 import type { ListItemWithDetail } from '@/types';
 
 interface ItemRowProps {
   listItem: ListItemWithDetail;
   index: number;
   onRemove: (itemId: string) => void;
+  onEdit: (itemId: string) => void;
 }
 
 export const ItemRow = memo(function ItemRow({
   listItem,
   index,
   onRemove,
+  onEdit,
 }: ItemRowProps) {
   const handleRemove = useCallback(() => {
     onRemove(listItem.item_id);
   }, [listItem.item_id, onRemove]);
+  const handleEdit = useCallback(() => {
+    onEdit(listItem.item_id);
+  }, [listItem.item_id, onEdit]);
 
   return (
     <Draggable draggableId={listItem.id} index={index}>
@@ -48,6 +53,17 @@ export const ItemRow = memo(function ItemRow({
                 <h4 className="font-display text-base text-retro-text truncate">
                   {listItem.item.title}
                 </h4>
+                {listItem.item.reminder_enabled ? (
+                  <span
+                    className="inline-flex items-center gap-1 font-mono text-[10px] text-retro-cyan"
+                    title={`Reminder every ${listItem.item.reminder_interval_days ?? '?'} days`}
+                  >
+                    <Bell size={10} />
+                    {listItem.item.reminder_interval_days
+                      ? `${listItem.item.reminder_interval_days}d`
+                      : ''}
+                  </span>
+                ) : null}
               </div>
               {listItem.item.description ? (
                 <p className="mt-1 ml-7 font-mono text-xs text-retro-muted whitespace-pre-wrap break-words">
@@ -57,9 +73,18 @@ export const ItemRow = memo(function ItemRow({
             </div>
 
             <button
+              onClick={handleEdit}
+              aria-label={`Edit ${listItem.item.title}`}
+              className="text-retro-muted hover:text-retro-cyan transition-colors p-1 -m-1"
+              type="button"
+            >
+              <Pencil size={16} />
+            </button>
+            <button
               onClick={handleRemove}
               aria-label={`Remove ${listItem.item.title}`}
               className="text-retro-muted hover:text-retro-magenta transition-colors p-1 -m-1"
+              type="button"
             >
               <Trash2 size={16} />
             </button>

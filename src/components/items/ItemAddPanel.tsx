@@ -1,11 +1,10 @@
 import { useCallback, useMemo, useState, useTransition } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Search, Sparkles } from 'lucide-react';
-import { Input } from '@/components/ui/Input';
-import { TextArea } from '@/components/ui/TextArea';
 import { Button } from '@/components/ui/Button';
-import { useItemsStore } from '@/stores/itemsStore';
+import { useItemsStore, type ItemFormPayload } from '@/stores/itemsStore';
 import { useUserId } from '@/stores/authStore';
+import { ItemForm } from './ItemForm';
 import type { Item, ListItemWithDetail } from '@/types';
 
 interface ItemAddPanelProps {
@@ -27,10 +26,19 @@ export function ItemAddPanel({
 
   const [mode, setMode] = useState<Mode>('search');
   const [query, setQuery] = useState('');
-  const [newTitle, setNewTitle] = useState('');
-  const [newDescription, setNewDescription] = useState('');
+  const [formPayload, setFormPayload] = useState<ItemFormPayload | null>(null);
+  const [formValid, setFormValid] = useState(false);
+  const [formKey, setFormKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const handleFormChange = useCallback(
+    (next: ItemFormPayload, valid: boolean) => {
+      setFormPayload(next);
+      setFormValid(valid);
+    },
+    [],
+  );
 
   const usedItemIds = useMemo(
     () => new Set(listItems.map((li) => li.item_id)),
@@ -79,20 +87,17 @@ export function ItemAddPanel({
   const handleCreate = useCallback(
     (e: React.FormEvent<HTMLFormElement>) => {
       e.preventDefault();
-      if (!userId) return;
-      const title = newTitle.trim();
-      if (!title) return;
+      if (!userId || !formPayload || !formValid) return;
       setError(null);
       startTransition(() => {
         void (async () => {
           try {
-            const item = await createItem(
-              { title, description: newDescription.trim() || null },
-              userId,
-            );
+            const item = await createItem(formPayload, userId);
             await addItemToList(listId, item.id);
-            setNewTitle('');
-            setNewDescription('');
+            // Reset form by remounting via key bump.
+            setFormKey((k) => k + 1);
+            setFormPayload(null);
+            setFormValid(false);
             setMode('search');
           } catch (err) {
             setError(
@@ -102,7 +107,7 @@ export function ItemAddPanel({
         })();
       });
     },
-    [userId, newTitle, newDescription, createItem, addItemToList, listId],
+    [userId, formPayload, formValid, createItem, addItemToList, listId],
   );
 
   return (
@@ -196,27 +201,16 @@ export function ItemAddPanel({
             transition={{ duration: 0.15 }}
             className="flex flex-col gap-3"
           >
-            <Input
-              label="Title"
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              placeholder="oat_milk"
-              required
-              maxLength={120}
-              autoFocus
-            />
-            <TextArea
-              label="Notes (optional)"
-              value={newDescription}
-              onChange={(e) => setNewDescription(e.target.value)}
-              placeholder="// brand, qty, tips..."
-              maxLength={400}
+            <ItemForm
+              key={formKey}
+              onChange={handleFormChange}
+              autoFocusTitle
             />
             <div className="flex justify-end">
               <Button
                 type="submit"
                 size="sm"
-                disabled={!newTitle.trim()}
+                disabled={!formValid}
                 loading={isPending}
                 iconLeft={<Plus size={14} />}
               >

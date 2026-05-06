@@ -4,7 +4,9 @@ import type { List } from '@/types';
 
 interface ListGridProps {
   lists: List[];
+  currentUserId: string | null;
   onDelete: (id: string) => void;
+  onLeave: (id: string) => void;
 }
 
 const containerVariants = {
@@ -14,7 +16,12 @@ const containerVariants = {
   },
 };
 
-export function ListGrid({ lists, onDelete }: ListGridProps) {
+export function ListGrid({
+  lists,
+  currentUserId,
+  onDelete,
+  onLeave,
+}: ListGridProps) {
   return (
     <motion.div
       variants={containerVariants}
@@ -23,7 +30,13 @@ export function ListGrid({ lists, onDelete }: ListGridProps) {
       className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
     >
       {lists.map((list) => (
-        <ListCard key={list.id} list={list} onDelete={onDelete} />
+        <ListCard
+          key={list.id}
+          list={list}
+          currentUserId={currentUserId}
+          onDelete={onDelete}
+          onLeave={onLeave}
+        />
       ))}
     </motion.div>
   );

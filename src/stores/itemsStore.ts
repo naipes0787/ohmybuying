@@ -2,6 +2,11 @@ import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
 import type { Item, ListItemWithDetail } from '@/types';
 
+export type ItemFormPayload = Pick<
+  Item,
+  'title' | 'description' | 'reminder_enabled' | 'reminder_interval_days'
+>;
+
 interface ItemsState {
   allItems: Item[];
   listItems: ListItemWithDetail[];
@@ -9,12 +14,11 @@ interface ItemsState {
   error: string | null;
   currentListId: string | null;
 
-  fetchAllItems: (userId: string) => Promise<void>;
+  fetchAllItems: () => Promise<void>;
   fetchListItems: (listId: string) => Promise<void>;
-  createItem: (
-    payload: Pick<Item, 'title' | 'description'>,
-    userId: string,
-  ) => Promise<Item>;
+  createItem: (payload: ItemFormPayload, userId: string) => Promise<Item>;
+  updateItem: (itemId: string, payload: ItemFormPayload) => Promise<Item>;
+  deleteItem: (itemId: string) => Promise<void>;
   addItemToList: (listId: string, itemId: string) => Promise<void>;
   removeItemFromList: (listId: string, itemId: string) => Promise<void>;
   setListItems: (next: ListItemWithDetail[]) => void;
@@ -31,11 +35,12 @@ export const useItemsStore = create<ItemsState>((set, get) => ({
   error: null,
   currentListId: null,
 
-  fetchAllItems: async (userId) => {
+  fetchAllItems: async () => {
+    // RLS scopes this to items the user authored + items used in any list
+    // they can access (own or shared).
     const { data, error } = await supabase
       .from('items')
       .select('*')
-      .eq('user_id', userId)
       .order('title', { ascending: true });
     if (error) {
       set({ error: error.message });
@@ -64,7 +69,15 @@ export const useItemsStore = create<ItemsState>((set, get) => ({
   createItem: async (payload, userId) => {
     const { data, error } = await supabase
       .from('items')
-      .insert({ ...payload, user_id: userId })
+      .insert({
+        title: payload.title,
+        description: payload.description,
+        reminder_enabled: payload.reminder_enabled,
+        reminder_interval_days: payload.reminder_enabled
+          ? payload.reminder_interval_days
+          : null,
+        user_id: userId,
+      })
       .select()
       .single();
     if (error) throw error;
@@ -75,6 +88,48 @@ export const useItemsStore = create<ItemsState>((set, get) => ({
       ),
     }));
     return item;
+  },
+
+  updateItem: async (itemId, payload) => {
+    const { data, error } = await supabase
+      .from('items')
+      .update({
+        title: payload.title,
+        description: payload.description,
+        reminder_enabled: payload.reminder_enabled,
+        reminder_interval_days: payload.reminder_enabled
+          ? payload.reminder_interval_days
+          : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', itemId)
+      .select()
+      .single();
+    if (error) throw error;
+    const updated = data as Item;
+    set((state) => ({
+      allItems: state.allItems
+        .map((it) => (it.id === itemId ? updated : it))
+        .sort((a, b) => a.title.localeCompare(b.title)),
+      listItems: state.listItems.map((li) =>
+        li.item_id === itemId ? { ...li, item: updated } : li,
+      ),
+    }));
+    return updated;
+  },
+
+  deleteItem: async (itemId) => {
+    const previousAll = get().allItems;
+    const previousList = get().listItems;
+    set((state) => ({
+      allItems: state.allItems.filter((it) => it.id !== itemId),
+      listItems: state.listItems.filter((li) => li.item_id !== itemId),
+    }));
+    const { error } = await supabase.from('items').delete().eq('id', itemId);
+    if (error) {
+      set({ allItems: previousAll, listItems: previousList });
+      throw error;
+    }
   },
 
   addItemToList: async (listId, itemId) => {

@@ -7,6 +7,7 @@ import { PageTransition } from '@/components/ui/PageTransition';
 import { ListGrid } from '@/components/lists/ListGrid';
 import { ListCreateModal } from '@/components/lists/ListCreateModal';
 import { EmptyLists } from '@/components/lists/EmptyLists';
+import { RemindersBanner } from '@/components/reminders/RemindersBanner';
 import {
   useLists,
   useListsLoading,
@@ -20,6 +21,7 @@ export default function ListsPage() {
   const loading = useListsLoading();
   const fetchLists = useListsStore((s) => s.fetchLists);
   const deleteList = useListsStore((s) => s.deleteList);
+  const leaveList = useListsStore((s) => s.leaveList);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [, startTransition] = useTransition();
@@ -41,6 +43,18 @@ export default function ListsPage() {
       });
     },
     [deleteList],
+  );
+
+  const handleLeave = useCallback(
+    (id: string) => {
+      if (!userId) return;
+      startTransition(() => {
+        leaveList(id, userId).catch((err) => {
+          console.error('Failed to leave list', err);
+        });
+      });
+    },
+    [leaveList, userId],
   );
 
   const openCreate = useCallback(() => setCreateOpen(true), []);
@@ -67,7 +81,15 @@ export default function ListsPage() {
         ) : lists.length === 0 ? (
           <EmptyLists onCreate={openCreate} />
         ) : (
-          <ListGrid lists={lists} onDelete={handleDelete} />
+          <>
+            <RemindersBanner />
+            <ListGrid
+              lists={lists}
+              currentUserId={userId}
+              onDelete={handleDelete}
+              onLeave={handleLeave}
+            />
+          </>
         )}
       </PageTransition>
 

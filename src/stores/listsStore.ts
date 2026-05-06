@@ -16,6 +16,7 @@ interface ListsState {
     payload: Partial<Pick<List, 'name' | 'description'>>,
   ) => Promise<void>;
   deleteList: (listId: string) => Promise<void>;
+  leaveList: (listId: string, userId: string) => Promise<void>;
   getList: (listId: string) => List | undefined;
 }
 
@@ -24,12 +25,12 @@ export const useListsStore = create<ListsState>((set, get) => ({
   loading: false,
   error: null,
 
-  fetchLists: async (userId) => {
+  fetchLists: async (_userId) => {
+    // RLS scopes this to lists the user owns OR is a member of.
     set({ loading: true, error: null });
     const { data, error } = await supabase
       .from('lists')
       .select('*')
-      .eq('user_id', userId)
       .order('created_at', { ascending: false });
     if (error) {
       set({ error: error.message, loading: false });
@@ -68,6 +69,20 @@ export const useListsStore = create<ListsState>((set, get) => ({
     const previous = get().lists;
     set((state) => ({ lists: state.lists.filter((l) => l.id !== listId) }));
     const { error } = await supabase.from('lists').delete().eq('id', listId);
+    if (error) {
+      set({ lists: previous });
+      throw error;
+    }
+  },
+
+  leaveList: async (listId, userId) => {
+    const previous = get().lists;
+    set((state) => ({ lists: state.lists.filter((l) => l.id !== listId) }));
+    const { error } = await supabase
+      .from('list_members')
+      .delete()
+      .eq('list_id', listId)
+      .eq('user_id', userId);
     if (error) {
       set({ lists: previous });
       throw error;

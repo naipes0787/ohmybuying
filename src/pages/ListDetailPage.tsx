@@ -6,14 +6,18 @@ import {
   useTransition,
 } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Share2, Users } from 'lucide-react';
 import type { DropResult } from '@hello-pangea/dnd';
 
 import { AppHeader } from '@/components/layout/AppHeader';
 import { LoadingScreen } from '@/components/ui/LoadingScreen';
 import { PageTransition } from '@/components/ui/PageTransition';
+import { Button } from '@/components/ui/Button';
 import { ItemList } from '@/components/items/ItemList';
 import { ItemAddPanel } from '@/components/items/ItemAddPanel';
+import { ItemEditModal } from '@/components/items/ItemEditModal';
+import { ListShareModal } from '@/components/lists/ListShareModal';
+import { useMembers, useMembersStore } from '@/stores/membersStore';
 
 import { useUserId } from '@/stores/authStore';
 import { useListsStore } from '@/stores/listsStore';
@@ -35,10 +39,23 @@ export default function ListDetailPage() {
   const reorderListItems = useItemsStore((s) => s.reorderListItems);
   const removeItemFromList = useItemsStore((s) => s.removeItemFromList);
 
+  const fetchMembers = useMembersStore((s) => s.fetchMembers);
+  const members = useMembers(listId);
+
   const [list, setList] = useState<List | null>(listFromStore ?? null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+
+  const editingItem = useMemo(
+    () =>
+      editingItemId
+        ? (listItems.find((li) => li.item_id === editingItemId)?.item ?? null)
+        : null,
+    [editingItemId, listItems],
+  );
 
   useEffect(() => {
     if (!listId || !userId) return;
@@ -46,7 +63,11 @@ export default function ListDetailPage() {
     setLoading(true);
     setError(null);
 
-    Promise.all([fetchListAndItems(listId), fetchAllItems(userId)])
+    Promise.all([
+      fetchListAndItems(listId),
+      fetchAllItems(),
+      fetchMembers(listId),
+    ])
       .then(([listResult]) => {
         if (cancelled) return;
         setList(listResult.list);
@@ -64,7 +85,7 @@ export default function ListDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [listId, userId, fetchAllItems, setListItems]);
+  }, [listId, userId, fetchAllItems, fetchMembers, setListItems]);
 
   const handleReorder = useCallback(
     (result: DropResult) => {
@@ -96,6 +117,13 @@ export default function ListDetailPage() {
     [listId, removeItemFromList],
   );
 
+  const handleEdit = useCallback((itemId: string) => {
+    setEditingItemId(itemId);
+  }, []);
+  const handleCloseEdit = useCallback(() => {
+    setEditingItemId(null);
+  }, []);
+
   const itemCountLabel = useMemo(() => {
     const n = listItems.length;
     return n === 1 ? '1 item' : `${n} items`;
@@ -125,16 +153,41 @@ export default function ListDetailPage() {
         {list ? (
           <header className="mb-8">
             <p className="label-terminal mb-1">/ list</p>
-            <h1 className="font-display text-3xl sm:text-4xl text-retro-text mb-2 break-words">
-              {list.name}
-            </h1>
+            <div className="flex items-start justify-between gap-3">
+              <h1 className="font-display text-3xl sm:text-4xl text-retro-text mb-2 break-words">
+                {list.name}
+              </h1>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShareOpen(true)}
+                iconLeft={<Share2 size={14} />}
+                className="shrink-0"
+              >
+                Share
+              </Button>
+            </div>
             {list.description ? (
               <p className="font-mono text-sm text-retro-muted whitespace-pre-wrap">
                 {list.description}
               </p>
             ) : null}
-            <div className="mt-4 font-mono text-[10px] uppercase tracking-[0.3em] text-retro-cyan">
-              <span className="text-glow-cyan">▸</span> {itemCountLabel}
+            <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1 font-mono text-[10px] uppercase tracking-[0.3em] text-retro-cyan">
+              <span>
+                <span className="text-glow-cyan">▸</span> {itemCountLabel}
+              </span>
+              {list.user_id !== userId ? (
+                <span className="text-retro-magenta">
+                  <span className="text-glow-magenta">◆</span> shared with you
+                </span>
+              ) : members.length > 0 ? (
+                <span className="text-retro-green inline-flex items-center gap-1">
+                  <Users size={11} />
+                  {members.length === 1
+                    ? '1 member'
+                    : `${members.length} members`}
+                </span>
+              ) : null}
             </div>
           </header>
         ) : null}
@@ -151,6 +204,7 @@ export default function ListDetailPage() {
               items={listItems}
               onReorder={handleReorder}
               onRemove={handleRemove}
+              onEdit={handleEdit}
             />
           )}
 
@@ -161,6 +215,20 @@ export default function ListDetailPage() {
           />
         </div>
       </PageTransition>
+
+      {list ? (
+        <ListShareModal
+          open={shareOpen}
+          onClose={() => setShareOpen(false)}
+          list={list}
+        />
+      ) : null}
+
+      <ItemEditModal
+        open={editingItem !== null}
+        onClose={handleCloseEdit}
+        item={editingItem}
+      />
     </>
   );
 }

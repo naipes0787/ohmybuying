@@ -1,26 +1,35 @@
 import { memo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { ChevronRight, Trash2 } from 'lucide-react';
+import { ChevronRight, LogOut, Trash2, Users } from 'lucide-react';
 import type { List } from '@/types';
 
 interface ListCardProps {
   list: List;
+  currentUserId: string | null;
   onDelete: (id: string) => void;
+  onLeave: (id: string) => void;
 }
 
 export const ListCard = memo(function ListCard({
   list,
+  currentUserId,
   onDelete,
+  onLeave,
 }: ListCardProps) {
-  const handleDelete = useCallback(
+  const isOwner = list.user_id === currentUserId;
+
+  const handleAction = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      const confirmed = window.confirm(`Delete list "${list.name}"?`);
-      if (confirmed) onDelete(list.id);
+      if (isOwner) {
+        if (window.confirm(`Delete list "${list.name}"?`)) onDelete(list.id);
+      } else {
+        if (window.confirm(`Leave list "${list.name}"?`)) onLeave(list.id);
+      }
     },
-    [list.id, list.name, onDelete],
+    [isOwner, list.id, list.name, onDelete, onLeave],
   );
 
   return (
@@ -41,11 +50,13 @@ export const ListCard = memo(function ListCard({
             {list.name}
           </h3>
           <button
-            onClick={handleDelete}
-            aria-label={`Delete ${list.name}`}
+            onClick={handleAction}
+            aria-label={
+              isOwner ? `Delete ${list.name}` : `Leave ${list.name}`
+            }
             className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-retro-muted hover:text-retro-magenta transition-all p-1 -m-1"
           >
-            <Trash2 size={16} />
+            {isOwner ? <Trash2 size={16} /> : <LogOut size={16} />}
           </button>
         </div>
 
@@ -60,10 +71,17 @@ export const ListCard = memo(function ListCard({
         )}
 
         <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.2em] text-retro-muted">
-          <span>
-            <span className="text-retro-cyan mr-1">▸</span>
-            open list
-          </span>
+          {isOwner ? (
+            <span>
+              <span className="text-retro-cyan mr-1">▸</span>
+              open list
+            </span>
+          ) : (
+            <span className="text-retro-magenta inline-flex items-center gap-1.5">
+              <Users size={11} />
+              shared
+            </span>
+          )}
           <ChevronRight
             size={14}
             className="text-retro-cyan opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-all"
