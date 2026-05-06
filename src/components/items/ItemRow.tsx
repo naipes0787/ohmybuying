@@ -1,6 +1,6 @@
 import { memo, useCallback } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
-import { Bell, GripVertical, Pencil, Trash2 } from 'lucide-react';
+import { Bell, Check, GripVertical, Pencil } from 'lucide-react';
 import type { ListItemWithDetail } from '@/types';
 
 interface ItemRowProps {
@@ -82,11 +82,12 @@ export const ItemRow = memo(function ItemRow({
             </button>
             <button
               onClick={handleRemove}
-              aria-label={`Remove ${listItem.item.title}`}
-              className="text-retro-muted hover:text-retro-magenta transition-colors p-1 -m-1"
+              aria-label={`Mark ${listItem.item.title} as bought`}
+              title="Mark as bought"
+              className="text-retro-muted hover:text-retro-green transition-colors p-1 -m-1"
               type="button"
             >
-              <Trash2 size={16} />
+              <Check size={16} />
             </button>
           </div>
         </div>
