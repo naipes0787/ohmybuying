@@ -11,7 +11,6 @@ interface MembersState {
   addMemberByEmail: (
     listId: string,
     email: string,
-    addedBy: string,
   ) => Promise<ListMemberWithProfile>;
   removeMember: (listId: string, userId: string) => Promise<void>;
 }
@@ -41,52 +40,54 @@ export const useMembersStore = create<MembersState>((set, get) => ({
     }));
   },
 
-  addMemberByEmail: async (listId, email, addedBy) => {
-    const trimmed = email.trim().toLowerCase();
+  addMemberByEmail: async (listId, email) => {
+    const trimmed = email.trim();
     if (!trimmed) throw new Error('Email is required');
 
-    const { data: lookupData, error: lookupError } = await supabase.rpc(
-      'lookup_user_by_email',
-      { p_email: trimmed },
+    // Atomic server-side RPC: ownership check + email lookup + insert all
+    // happen with auth.uid() context, so the client never learns whether an
+    // email exists outside the success path.
+    const { data: status, error } = await supabase.rpc(
+      'add_list_member_by_email',
+      { p_list_id: listId, p_email: trimmed },
     );
-    if (lookupError) throw lookupError;
-    const targetUserId = lookupData as string | null;
-    if (!targetUserId) {
-      throw new Error(
-        `No user found with email "${email}". They need to sign up first.`,
-      );
+    if (error) throw error;
+    switch (status as string) {
+      case 'ok':
+        break;
+      case 'no_such_user':
+        throw new Error(
+          `No user found with email "${email}". They need to sign up first.`,
+        );
+      case 'cannot_add_self':
+        throw new Error('You are already the owner of this list.');
+      case 'not_owner':
+        throw new Error('Only the list owner can add members.');
+      case 'unauthenticated':
+        throw new Error('You need to sign in again.');
+      default:
+        throw new Error('Failed to add member.');
     }
 
-    const existing = get().byListId[listId] ?? [];
-    if (existing.some((m) => m.user_id === targetUserId)) {
-      throw new Error('That user is already a member of this list.');
-    }
-
-    const { error: insertError } = await supabase
-      .from('list_members')
-      .insert({ list_id: listId, user_id: targetUserId, added_by: addedBy });
-    if (insertError) {
-      if (insertError.code === '23505') {
-        throw new Error('That user is already a member of this list.');
-      }
-      throw insertError;
-    }
-
-    // Refetch to get the joined profile shape consistently.
-    const { data: row, error: rowError } = await supabase
+    // Refetch the full member list — simplest way to get the new row with
+    // its joined profile shape. The list is small (handful of members) so
+    // this is cheap.
+    const { data: rows, error: rowError } = await supabase
       .from('list_members')
       .select('*, profile:profiles!list_members_user_id_fkey(id, email)')
       .eq('list_id', listId)
-      .eq('user_id', targetUserId)
-      .single();
+      .order('created_at', { ascending: true });
     if (rowError) throw rowError;
-    const member = row as ListMemberWithProfile;
+    const refreshed = (rows ?? []) as ListMemberWithProfile[];
     set((state) => ({
-      byListId: {
-        ...state.byListId,
-        [listId]: [...(state.byListId[listId] ?? []), member],
-      },
+      byListId: { ...state.byListId, [listId]: refreshed },
     }));
+    const member = refreshed.find(
+      (m) => m.profile?.email?.toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (!member) {
+      throw new Error('Member added but profile not visible yet.');
+    }
     return member;
   },
 

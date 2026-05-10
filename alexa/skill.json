@@ -1,0 +1,65 @@
+{
+  "manifest": {
+    "publishingInformation": {
+      "locales": {
+        "en-US": {
+          "summary": "Voice control for your ohMyBuying shopping lists.",
+          "description": "Add, remove, and read items on your ohMyBuying shopping lists with your voice. Link your account with a one-time code from the ohMyBuying app, then say things like 'Alexa, ask oh my buying to add eggs to my groceries list'.",
+          "examplePhrases": [
+            "Alexa, open oh my buying",
+            "Alexa, ask oh my buying to add eggs to my groceries list",
+            "Alexa, ask oh my buying what is on my groceries list"
+          ],
+          "name": "ohMyBuying",
+          "smallIconUri": "https://ohmybuying.vercel.app/icons/icon-192.svg",
+          "largeIconUri": "https://ohmybuying.vercel.app/icons/icon-512.svg",
+          "keywords": ["shopping", "list", "groceries", "todo"]
+        },
+        "es-ES": {
+          "summary": "Control por voz de tus listas de compras de ohMyBuying.",
+          "description": "Añade, quita y lee elementos de tus listas de compras de ohMyBuying con la voz. Vincula tu cuenta con un código de un solo uso desde la aplicación, y luego di cosas como 'Alexa, pídele a oh my buying que añada huevos a mi lista de compras'.",
+          "examplePhrases": [
+            "Alexa, abre oh my buying",
+            "Alexa, pídele a oh my buying que añada huevos a mi lista de compras",
+            "Alexa, pregúntale a oh my buying qué hay en mi lista de compras"
+          ],
+          "name": "ohMyBuying",
+          "smallIconUri": "https://ohmybuying.vercel.app/icons/icon-192.svg",
+          "largeIconUri": "https://ohmybuying.vercel.app/icons/icon-512.svg",
+          "keywords": ["compras", "lista", "supermercado"]
+        }
+      },
+      "isAvailableWorldwide": false,
+      "testingInstructions": "Sign up at https://ohmybuying.vercel.app, generate an Alexa link code from the dashboard, then say 'Alexa, ask oh my buying to link with code <CODE>'. After linking, you can add and remove items.",
+      "category": "ORGANIZERS_AND_ASSISTANTS",
+      "distributionCountries": ["US", "ES"]
+    },
+    "apis": {
+      "custom": {
+        "endpoint": {
+          "uri": "https://ohmybuying.vercel.app/api/alexa",
+          "sslCertificateType": "Wildcard"
+        },
+        "interfaces": []
+      }
+    },
+    "manifestVersion": "1.0",
+    "privacyAndCompliance": {
+      "allowsPurchases": false,
+      "usesPersonalInfo": true,
+      "isChildDirected": false,
+      "isExportCompliant": true,
+      "containsAds": false,
+      "locales": {
+        "en-US": {
+          "privacyPolicyUrl": "https://ohmybuying.vercel.app/privacy",
+          "termsOfUseUrl": "https://ohmybuying.vercel.app/terms"
+        },
+        "es-ES": {
+          "privacyPolicyUrl": "https://ohmybuying.vercel.app/privacy",
+          "termsOfUseUrl": "https://ohmybuying.vercel.app/terms"
+        }
+      }
+    }
+  }
+}

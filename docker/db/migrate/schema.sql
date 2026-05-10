@@ -125,17 +125,55 @@ $$;
 
 grant execute on function public.is_list_member(uuid) to authenticated;
 
--- Helper: find a user by email so we can add them as a list member.
--- Restricted to authenticated users; returns NULL if no match (no info leak
--- about which emails exist beyond a yes/no).
-create or replace function public.lookup_user_by_email(p_email text)
-returns uuid language sql stable security definer set search_path = public, auth as $$
-  select id from auth.users
+-- Add a member to a list by their email, atomically. The caller must own the
+-- list. Returns a status enum so the client never sees a UUID for an account
+-- it didn't already know about — this avoids using the function as a generic
+-- email-existence oracle (the old lookup_user_by_email did exactly that).
+create or replace function public.add_list_member_by_email(
+  p_list_id uuid,
+  p_email text
+)
+returns text language plpgsql security definer set search_path = public, auth as $$
+declare
+  v_target_id uuid;
+  v_caller    uuid := auth.uid();
+begin
+  if v_caller is null then
+    return 'unauthenticated';
+  end if;
+
+  if not exists (
+    select 1 from public.lists where id = p_list_id and user_id = v_caller
+  ) then
+    return 'not_owner';
+  end if;
+
+  select id into v_target_id
+  from auth.users
   where lower(email) = lower(p_email)
   limit 1;
+
+  if v_target_id is null then
+    return 'no_such_user';
+  end if;
+
+  if v_target_id = v_caller then
+    return 'cannot_add_self';
+  end if;
+
+  insert into public.list_members (list_id, user_id, added_by)
+  values (p_list_id, v_target_id, v_caller)
+  on conflict (list_id, user_id) do nothing;
+
+  return 'ok';
+end;
 $$;
 
-grant execute on function public.lookup_user_by_email(text) to authenticated;
+revoke all on function public.add_list_member_by_email(uuid, text) from public;
+grant execute on function public.add_list_member_by_email(uuid, text) to authenticated;
+
+-- Drop the old leaky email-lookup function if it still exists from a prior boot.
+drop function if exists public.lookup_user_by_email(text);
 
 -- "Due reminders": items the current user can see that have reminders on,
 -- aren't currently on any list, and whose last_used_at is older than the
@@ -179,6 +217,128 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 grant execute on function public.due_reminders() to authenticated;
+
+-- ============================================================
+-- Alexa account linking
+-- ============================================================
+
+-- A code the user generates inside the app, then types into the Alexa app.
+-- Codes are 6 chars, expire in 10 minutes, single-use.
+create table if not exists public.alexa_link_codes (
+  code         text primary key,
+  user_id      uuid not null references public.profiles(id) on delete cascade,
+  expires_at   timestamptz not null,
+  redeemed_at  timestamptz,
+  alexa_user_id text,
+  created_at   timestamptz default now()
+);
+
+create index if not exists alexa_link_codes_user_id on public.alexa_link_codes(user_id);
+
+-- Permanent binding once redeemed.
+create table if not exists public.alexa_links (
+  alexa_user_id text primary key,
+  user_id       uuid not null references public.profiles(id) on delete cascade,
+  created_at    timestamptz default now()
+);
+
+create index if not exists alexa_links_user_id on public.alexa_links(user_id);
+
+alter table public.alexa_link_codes enable row level security;
+alter table public.alexa_links      enable row level security;
+
+drop policy if exists "alexa_link_codes own"     on public.alexa_link_codes;
+drop policy if exists "alexa_links own read"     on public.alexa_links;
+drop policy if exists "alexa_links own delete"   on public.alexa_links;
+
+-- A user only sees / mutates their own codes.
+create policy "alexa_link_codes own"
+  on public.alexa_link_codes for all
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
+-- A user can see / unlink their own Alexa binding. Inserts come from the
+-- service role via the redeem RPC, never from authenticated clients.
+create policy "alexa_links own read"
+  on public.alexa_links for select using (user_id = auth.uid());
+create policy "alexa_links own delete"
+  on public.alexa_links for delete using (user_id = auth.uid());
+
+-- Issue a fresh 6-character code for the current user. Older unredeemed codes
+-- for the same user are wiped so only one is active at a time.
+create or replace function public.issue_alexa_link_code()
+returns table (code text, expires_at timestamptz)
+language plpgsql security definer set search_path = public as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_code text;
+  v_expires timestamptz := now() + interval '10 minutes';
+begin
+  if v_user_id is null then
+    raise exception 'not authenticated';
+  end if;
+
+  delete from public.alexa_link_codes
+   where user_id = v_user_id and redeemed_at is null;
+
+  -- 6-character uppercase code from a friendly alphabet (no 0/O/1/I confusion).
+  v_code := upper(substring(replace(encode(gen_random_bytes(8), 'base64'), '/', '')
+                            from 1 for 6));
+  v_code := translate(v_code, '0O1I+/', 'XKJLMN');
+
+  insert into public.alexa_link_codes (code, user_id, expires_at)
+  values (v_code, v_user_id, v_expires);
+
+  return query select v_code, v_expires;
+end;
+$$;
+grant execute on function public.issue_alexa_link_code() to authenticated;
+
+-- Redeem a code: server-side only (no JWT). The Vercel handler calls this
+-- using the service_role key, so we restrict it accordingly.
+create or replace function public.redeem_alexa_link_code(
+  p_code text,
+  p_alexa_user_id text
+)
+returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  v_user_id uuid;
+begin
+  if p_code is null or p_alexa_user_id is null then
+    return null;
+  end if;
+
+  update public.alexa_link_codes
+     set redeemed_at = now(),
+         alexa_user_id = p_alexa_user_id
+   where code = upper(p_code)
+     and redeemed_at is null
+     and expires_at > now()
+   returning user_id into v_user_id;
+
+  if v_user_id is null then
+    return null;
+  end if;
+
+  insert into public.alexa_links (alexa_user_id, user_id)
+  values (p_alexa_user_id, v_user_id)
+  on conflict (alexa_user_id) do update set user_id = excluded.user_id;
+
+  return v_user_id;
+end;
+$$;
+revoke all on function public.redeem_alexa_link_code(text, text) from public;
+grant execute on function public.redeem_alexa_link_code(text, text) to service_role;
+
+-- Resolve an Alexa user to a Supabase user. Server-side only.
+create or replace function public.resolve_alexa_user(p_alexa_user_id text)
+returns uuid
+language sql stable security definer set search_path = public as $$
+  select user_id from public.alexa_links where alexa_user_id = p_alexa_user_id;
+$$;
+revoke all on function public.resolve_alexa_user(text) from public;
+grant execute on function public.resolve_alexa_user(text) to service_role;
 
 -- Row-Level Security
 alter table public.profiles     enable row level security;
@@ -276,9 +436,12 @@ create policy "items read"
     )
   );
 
+-- An authenticated user may only insert items as themselves (or anonymous).
+-- Without this check, a JWT holder could plant items "owned" by a different
+-- user_id and then exploit the items update/delete policies.
 create policy "items insert"
   on public.items for insert
-  with check (auth.uid() is not null);
+  with check (user_id is null or user_id = auth.uid());
 
 create policy "items update"
   on public.items for update

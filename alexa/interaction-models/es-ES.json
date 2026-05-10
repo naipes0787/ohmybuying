@@ -1,0 +1,69 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "oh my buying",
+      "intents": [
+        { "name": "AMAZON.CancelIntent", "samples": [] },
+        { "name": "AMAZON.HelpIntent", "samples": [] },
+        { "name": "AMAZON.StopIntent", "samples": [] },
+        { "name": "AMAZON.NavigateHomeIntent", "samples": [] },
+        { "name": "AMAZON.FallbackIntent", "samples": [] },
+        {
+          "name": "AddItemIntent",
+          "slots": [
+            { "name": "item", "type": "AMAZON.SearchQuery" },
+            { "name": "listName", "type": "AMAZON.SearchQuery" }
+          ],
+          "samples": [
+            "añade {item}",
+            "añade {item} a mi lista",
+            "agrega {item}",
+            "pon {item} en mi lista",
+            "necesito {item}",
+            "anota {item}"
+          ]
+        },
+        {
+          "name": "RemoveItemIntent",
+          "slots": [
+            { "name": "item", "type": "AMAZON.SearchQuery" },
+            { "name": "listName", "type": "AMAZON.SearchQuery" }
+          ],
+          "samples": [
+            "quita {item}",
+            "elimina {item}",
+            "borra {item} de mi lista",
+            "ya compré {item}"
+          ]
+        },
+        {
+          "name": "ListItemsIntent",
+          "slots": [
+            { "name": "listName", "type": "AMAZON.SearchQuery" }
+          ],
+          "samples": [
+            "qué hay en mi lista",
+            "léeme mi lista",
+            "qué necesito",
+            "qué hay en {listName}",
+            "léeme {listName}",
+            "qué necesito de {listName}"
+          ]
+        },
+        {
+          "name": "LinkWithCodeIntent",
+          "slots": [
+            { "name": "code", "type": "AMAZON.SearchQuery" }
+          ],
+          "samples": [
+            "vincular con código {code}",
+            "vincula mi cuenta con el código {code}",
+            "usa el código {code}",
+            "mi código es {code}"
+          ]
+        }
+      ],
+      "types": []
+    }
+  }
+}

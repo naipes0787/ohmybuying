@@ -42,7 +42,7 @@ export function ListShareModal({ open, onClose, list }: ListShareModalProps) {
       startTransition(() => {
         void (async () => {
           try {
-            await addMemberByEmail(list.id, email, currentUserId);
+            await addMemberByEmail(list.id, email);
             setEmail('');
           } catch (err) {
             setError(

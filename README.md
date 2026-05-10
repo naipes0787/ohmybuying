@@ -97,3 +97,22 @@ Dark canvas (`#0a0a0f`), neon cyan + magenta accents, pixel grid background, opt
 - Zustand selectors return primitives only
 - Manual chunk splits in `vite.config.ts` for `react-vendor`, `supabase`, `motion`, `dnd`, `zustand`
 - Self-hosted fonts (no Google Fonts CDN)
+
+## Sharing model — what to know
+
+Lists can be shared by email (owner only). Members get full edit access. A few intentional tradeoffs:
+
+- **An item can belong to multiple lists.** When a member edits an item that also appears on a different list (e.g. an owner's private list), the edit propagates everywhere that item appears. If a user wants per-list isolation, they should re-create the item rather than reuse an existing one. The `ItemAddPanel` shows whether an item is "already on this list", but it does not prevent re-using items across lists.
+- **Items keep an author (`user_id`).** Anyone with access to a list containing the item can read, edit, or delete it via RLS. The author field is informational, not a permission boundary.
+- **Permanent item delete cascades.** Deleting an item from the edit modal removes it from every list it appears on. The trash/check icon on a row only removes it from the current list.
+- **`add_list_member_by_email` is a single atomic RPC.** It checks ownership, looks up the email, and inserts the membership in one transaction. The client never sees a UUID for an account it didn't already have visibility into — this is intentional, to avoid using the share flow as a generic email-existence oracle.
+
+## Production deploy checklist
+
+Before pointing real users at this:
+
+- Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in Vercel **Production** env (not committed values).
+- Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` for the `/api/alexa` function. These are server-only — never expose the service-role key to the browser.
+- Apply the latest `supabase/schema.sql` to the hosted project (SQL editor → run).
+- The committed `vercel.json` ships HSTS, CSP, X-Frame-Options, and Referrer-Policy. If you embed external resources (analytics, fonts), update the `Content-Security-Policy` header.
+- The committed `docker/.env` contains publicly-known dev keys for the local Docker stack only. Do not deploy these.

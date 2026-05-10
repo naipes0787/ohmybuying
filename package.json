@@ -14,6 +14,9 @@
     "@fontsource/space-grotesk": "^5.0.20",
     "@hello-pangea/dnd": "^17.0.0",
     "@supabase/supabase-js": "^2.45.4",
+    "ask-sdk-core": "^2.14.0",
+    "ask-sdk-express-adapter": "^2.14.0",
+    "ask-sdk-model": "^1.86.0",
     "framer-motion": "^11.11.7",
     "lucide-react": "^0.451.0",
     "react": "^18.3.1",
@@ -22,8 +25,10 @@
     "zustand": "^4.5.5"
   },
   "devDependencies": {
+    "@types/node": "^22.7.5",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.0",
+    "@vercel/node": "^3.2.24",
     "@vitejs/plugin-react": "^4.3.2",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.47",
