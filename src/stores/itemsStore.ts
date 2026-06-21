@@ -10,11 +10,13 @@ export type ItemFormPayload = Pick<
 interface ItemsState {
   allItems: Item[];
   listItems: ListItemWithDetail[];
+  suggestions: Item[];
   loading: boolean;
   error: string | null;
   currentListId: string | null;
 
   fetchAllItems: () => Promise<void>;
+  fetchSuggestions: (listId: string) => Promise<void>;
   fetchListItems: (listId: string) => Promise<void>;
   createItem: (payload: ItemFormPayload, userId: string) => Promise<Item>;
   updateItem: (itemId: string, payload: ItemFormPayload) => Promise<Item>;
@@ -31,6 +33,7 @@ interface ItemsState {
 export const useItemsStore = create<ItemsState>((set, get) => ({
   allItems: [],
   listItems: [],
+  suggestions: [],
   loading: false,
   error: null,
   currentListId: null,
@@ -47,6 +50,19 @@ export const useItemsStore = create<ItemsState>((set, get) => ({
       return;
     }
     set({ allItems: (data ?? []) as Item[] });
+  },
+
+  fetchSuggestions: async (listId) => {
+    // Server-side: only items used in same-type accessible lists, excluding
+    // those already on this list (see the suggest_items RPC).
+    const { data, error } = await supabase.rpc('suggest_items', {
+      p_list_id: listId,
+    });
+    if (error) {
+      set({ error: error.message });
+      return;
+    }
+    set({ suggestions: (data ?? []) as Item[] });
   },
 
   fetchListItems: async (listId) => {
@@ -140,6 +156,11 @@ export const useItemsStore = create<ItemsState>((set, get) => ({
       .from('list_items')
       .insert({ list_id: listId, item_id: itemId, position: nextPosition });
     if (error) throw error;
+    // Drop the just-added item from suggestions optimistically; the list
+    // itself is refetched for canonical ordering/positions.
+    set((state) => ({
+      suggestions: state.suggestions.filter((it) => it.id !== itemId),
+    }));
     await get().fetchListItems(listId);
   },
 
@@ -188,5 +209,6 @@ export const useItemsStore = create<ItemsState>((set, get) => ({
 }));
 
 export const useAllItems = () => useItemsStore((s) => s.allItems);
+export const useSuggestions = () => useItemsStore((s) => s.suggestions);
 export const useListItemsState = () => useItemsStore((s) => s.listItems);
 export const useItemsLoading = () => useItemsStore((s) => s.loading);

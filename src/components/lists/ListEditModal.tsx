@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { TextArea } from '@/components/ui/TextArea';
@@ -8,34 +8,42 @@ import {
   useLists,
   useListsStore,
 } from '@/stores/listsStore';
-import { useUserId } from '@/stores/authStore';
+import type { List } from '@/types';
 
-interface ListCreateModalProps {
+interface ListEditModalProps {
   open: boolean;
   onClose: () => void;
-  onCreated?: (listId: string) => void;
+  list: List | null;
+  onUpdated?: (updated: List) => void;
 }
 
-export function ListCreateModal({
+export function ListEditModal({
   open,
   onClose,
-  onCreated,
-}: ListCreateModalProps) {
-  const userId = useUserId();
-  const createList = useListsStore((s) => s.createList);
+  list,
+  onUpdated,
+}: ListEditModalProps) {
+  const updateList = useListsStore((s) => s.updateList);
   const lists = useLists();
   const existingTypes = useMemo(() => distinctListTypes(lists), [lists]);
+
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [type, setType] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  // Sync form fields whenever the target list changes (e.g. modal reopened).
+  useEffect(() => {
+    if (!list) return;
+    setName(list.name);
+    setDescription(list.description ?? '');
+    setType(list.type ?? '');
+    setError(null);
+  }, [list]);
+
   const handleClose = useCallback(() => {
     if (isPending) return;
-    setName('');
-    setDescription('');
-    setType('');
     setError(null);
     onClose();
   }, [isPending, onClose]);
@@ -43,37 +51,36 @@ export function ListCreateModal({
   const handleSubmit = useCallback(
     (e: React.FormEvent<HTMLFormElement>) => {
       e.preventDefault();
-      if (!userId) return;
+      if (!list) return;
       setError(null);
       startTransition(() => {
         void (async () => {
           try {
-            const list = await createList(
-              {
-                name: name.trim(),
-                description: description.trim() || null,
-                type: type.trim() || null,
-              },
-              userId,
-            );
-            setName('');
-            setDescription('');
-            setType('');
-            onCreated?.(list.id);
+            await updateList(list.id, {
+              name: name.trim(),
+              description: description.trim() || null,
+              type: type.trim() || null,
+            });
+            onUpdated?.({
+              ...list,
+              name: name.trim(),
+              description: description.trim() || null,
+              type: type.trim() || null,
+            });
             onClose();
           } catch (err) {
             setError(
-              err instanceof Error ? err.message : 'Failed to create list',
+              err instanceof Error ? err.message : 'Failed to update list',
             );
           }
         })();
       });
     },
-    [name, description, type, userId, createList, onClose, onCreated],
+    [list, name, description, type, updateList, onClose, onUpdated],
   );
 
   return (
-    <Modal open={open} onClose={handleClose} title="New list">
+    <Modal open={open} onClose={handleClose} title="Edit list">
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Input
           label="Name"
@@ -91,10 +98,10 @@ export function ListCreateModal({
           placeholder="groceries, movies, todo..."
           hint="Groups suggestions: items are only suggested across lists of the same type."
           maxLength={40}
-          list="list-type-options"
+          list="list-type-options-edit"
         />
         {existingTypes.length > 0 ? (
-          <datalist id="list-type-options">
+          <datalist id="list-type-options-edit">
             {existingTypes.map((t) => (
               <option key={t} value={t} />
             ))}
@@ -121,12 +128,8 @@ export function ListCreateModal({
           >
             Cancel
           </Button>
-          <Button
-            type="submit"
-            loading={isPending}
-            disabled={!name.trim()}
-          >
-            Create
+          <Button type="submit" loading={isPending} disabled={!name.trim()}>
+            Save
           </Button>
         </div>
       </form>

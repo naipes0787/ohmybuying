@@ -6,7 +6,7 @@ import {
   useTransition,
 } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Share2, Users } from 'lucide-react';
+import { ArrowLeft, Pencil, Share2, Users } from 'lucide-react';
 import type { DropResult } from '@hello-pangea/dnd';
 
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -17,6 +17,7 @@ import { ItemList } from '@/components/items/ItemList';
 import { ItemAddPanel } from '@/components/items/ItemAddPanel';
 import { ItemEditModal } from '@/components/items/ItemEditModal';
 import { ListShareModal } from '@/components/lists/ListShareModal';
+import { ListEditModal } from '@/components/lists/ListEditModal';
 import { useMembers, useMembersStore } from '@/stores/membersStore';
 
 import { useUserId } from '@/stores/authStore';
@@ -32,9 +33,9 @@ export default function ListDetailPage() {
   const listFromStore = useListsStore((s) =>
     listId ? s.lists.find((l) => l.id === listId) : undefined,
   );
-  const allItems = useItemsStore((s) => s.allItems);
+  const suggestions = useItemsStore((s) => s.suggestions);
   const listItems = useItemsStore((s) => s.listItems);
-  const fetchAllItems = useItemsStore((s) => s.fetchAllItems);
+  const fetchSuggestions = useItemsStore((s) => s.fetchSuggestions);
   const setListItems = useItemsStore((s) => s.setListItems);
   const reorderListItems = useItemsStore((s) => s.reorderListItems);
   const removeItemFromList = useItemsStore((s) => s.removeItemFromList);
@@ -46,6 +47,7 @@ export default function ListDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
@@ -65,7 +67,7 @@ export default function ListDetailPage() {
 
     Promise.all([
       fetchListAndItems(listId),
-      fetchAllItems(),
+      fetchSuggestions(listId),
       fetchMembers(listId),
     ])
       .then(([listResult]) => {
@@ -85,7 +87,7 @@ export default function ListDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [listId, userId, fetchAllItems, fetchMembers, setListItems]);
+  }, [listId, userId, fetchSuggestions, fetchMembers, setListItems]);
 
   const handleReorder = useCallback(
     (result: DropResult) => {
@@ -157,15 +159,26 @@ export default function ListDetailPage() {
               <h1 className="font-display text-3xl sm:text-4xl text-retro-text mb-2 break-words">
                 {list.name}
               </h1>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShareOpen(true)}
-                iconLeft={<Share2 size={14} />}
-                className="shrink-0"
-              >
-                Share
-              </Button>
+              <div className="flex items-center gap-2 shrink-0">
+                {list.user_id === userId ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setEditOpen(true)}
+                    iconLeft={<Pencil size={14} />}
+                  >
+                    Edit
+                  </Button>
+                ) : null}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShareOpen(true)}
+                  iconLeft={<Share2 size={14} />}
+                >
+                  Share
+                </Button>
+              </div>
             </div>
             {list.description ? (
               <p className="font-mono text-sm text-retro-muted whitespace-pre-wrap">
@@ -210,7 +223,7 @@ export default function ListDetailPage() {
 
           <ItemAddPanel
             listId={listId}
-            allItems={allItems}
+            suggestions={suggestions}
             listItems={listItems}
           />
         </div>
@@ -221,6 +234,20 @@ export default function ListDetailPage() {
           open={shareOpen}
           onClose={() => setShareOpen(false)}
           list={list}
+        />
+      ) : null}
+
+      {list ? (
+        <ListEditModal
+          open={editOpen}
+          onClose={() => setEditOpen(false)}
+          list={list}
+          onUpdated={(updated) => {
+            setList(updated);
+            document.title = `ohMyBuying — ${updated.name}`;
+            // Type may have changed — refresh the scoped suggestions.
+            void fetchSuggestions(updated.id);
+          }}
         />
       ) : null}
 

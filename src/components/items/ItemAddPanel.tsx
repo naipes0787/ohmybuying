@@ -9,7 +9,11 @@ import type { Item, ListItemWithDetail } from '@/types';
 
 interface ItemAddPanelProps {
   listId: string;
-  allItems: Item[];
+  /**
+   * Scoped suggestions for this list: items already used in same-type lists,
+   * excluding ones on this list (computed server-side by the suggest_items RPC).
+   */
+  suggestions: Item[];
   listItems: ListItemWithDetail[];
 }
 
@@ -17,7 +21,7 @@ type Mode = 'search' | 'create';
 
 export function ItemAddPanel({
   listId,
-  allItems,
+  suggestions,
   listItems,
 }: ItemAddPanelProps) {
   const userId = useUserId();
@@ -54,18 +58,12 @@ export function ItemAddPanel({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const candidates = allItems.filter((it) => !usedItemIds.has(it.id));
+    // The RPC already excludes items on this list and off-type items; the
+    // usedItemIds guard only covers the brief optimistic window after an add.
+    const candidates = suggestions.filter((it) => !usedItemIds.has(it.id));
     if (!q) return candidates.slice(0, 6);
     return candidates.filter((it) => matchesQuery(it, q)).slice(0, 8);
-  }, [allItems, usedItemIds, query, matchesQuery]);
-
-  const queryMatchesAlreadyAdded = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return false;
-    return allItems.some(
-      (it) => usedItemIds.has(it.id) && matchesQuery(it, q),
-    );
-  }, [allItems, usedItemIds, query, matchesQuery]);
+  }, [suggestions, usedItemIds, query, matchesQuery]);
 
   const handleAddExisting = useCallback(
     (itemId: string) => {
@@ -144,7 +142,7 @@ export function ItemAddPanel({
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="// search your items"
+                placeholder="// search suggestions"
                 className="input-terminal pl-6"
               />
             </div>
@@ -181,13 +179,11 @@ export function ItemAddPanel({
               </ul>
             ) : (
               <p className="font-mono text-xs text-retro-muted">
-                {allItems.length === 0
-                  ? '// no items yet — switch to "Create" to make your first one'
+                {suggestions.length === 0
+                  ? '// no suggestions for this list type yet — switch to "Create" to add one'
                   : query
-                    ? queryMatchesAlreadyAdded
-                      ? `// "${query}" is already on this list`
-                      : `// no matches for "${query}" — switch to "Create" to add it`
-                    : '// every item is already on this list'}
+                    ? `// no matches for "${query}" — switch to "Create" to add it`
+                    : '// no more suggestions — switch to "Create" to add a new item'}
               </p>
             )}
           </motion.div>

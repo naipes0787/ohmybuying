@@ -9,6 +9,8 @@ export interface List {
   user_id: string;
   name: string;
   description: string | null;
+  /** Free-text, user-defined category that scopes item suggestions. */
+  type: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -15,9 +15,12 @@ create table if not exists public.lists (
   user_id uuid not null references public.profiles(id) on delete cascade,
   name text not null,
   description text,
+  type text,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+
+alter table public.lists add column if not exists type text;
 
 create table if not exists public.items (
   id uuid primary key default gen_random_uuid(),
@@ -217,6 +220,33 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 grant execute on function public.due_reminders() to authenticated;
+
+create or replace function public.suggest_items(p_list_id uuid)
+returns setof public.items
+language sql stable security definer set search_path = public as $$
+  with target as (
+    select nullif(lower(trim(l.type)), '') as norm_type
+    from public.lists l
+    where l.id = p_list_id and public.can_access_list(p_list_id)
+  )
+  select i.*
+  from public.items i
+  where exists (
+    select 1
+    from public.list_items li
+    join public.lists l on l.id = li.list_id
+    cross join target t
+    where li.item_id = i.id
+      and public.can_access_list(li.list_id)
+      and nullif(lower(trim(l.type)), '') is not distinct from t.norm_type
+  )
+  and not exists (
+    select 1 from public.list_items li
+    where li.item_id = i.id and li.list_id = p_list_id
+  )
+  order by i.last_used_at desc nulls last, i.title asc;
+$$;
+grant execute on function public.suggest_items(uuid) to authenticated;
 
 -- ============================================================
 -- Alexa account linking

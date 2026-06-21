@@ -8,12 +8,12 @@ interface ListsState {
   error: string | null;
   fetchLists: (userId: string) => Promise<void>;
   createList: (
-    payload: Pick<List, 'name' | 'description'>,
+    payload: Pick<List, 'name' | 'description' | 'type'>,
     userId: string,
   ) => Promise<List>;
   updateList: (
     listId: string,
-    payload: Partial<Pick<List, 'name' | 'description'>>,
+    payload: Partial<Pick<List, 'name' | 'description' | 'type'>>,
   ) => Promise<void>;
   deleteList: (listId: string) => Promise<void>;
   leaveList: (listId: string, userId: string) => Promise<void>;
@@ -95,3 +95,13 @@ export const useListsStore = create<ListsState>((set, get) => ({
 export const useLists = () => useListsStore((s) => s.lists);
 export const useListsLoading = () => useListsStore((s) => s.loading);
 export const useListsError = () => useListsStore((s) => s.error);
+
+/** Distinct, non-empty list types — derive with useMemo from useLists(). */
+export function distinctListTypes(lists: List[]): string[] {
+  const seen = new Map<string, string>();
+  for (const l of lists) {
+    const norm = l.type?.trim().toLowerCase();
+    if (norm && !seen.has(norm)) seen.set(norm, l.type!.trim());
+  }
+  return [...seen.values()].sort((a, b) => a.localeCompare(b));
+}

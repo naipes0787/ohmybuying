@@ -9,14 +9,22 @@ create table public.profiles (
 );
 
 -- 2. Lists owned by a user
+-- `type` is a free-text, user-defined category (e.g. "groceries", "movies",
+-- "todo"). It scopes item suggestions: an item is only suggested for a list
+-- whose type matches a type of another list the item already belongs to.
+-- Nullable — untyped lists form their own bucket.
 create table public.lists (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles(id) on delete cascade,
   name text not null,
   description text,
+  type text,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+
+-- Migration (existing databases): add the column if it isn't there yet.
+alter table public.lists add column if not exists type text;
 
 -- 3. Items (catalogue, reusable across lists). user_id is the original creator
 -- but is nullable: a shared list can hold items the current viewer didn't author.
@@ -206,6 +214,47 @@ language sql stable security definer set search_path = public as $$
   order by i.last_used_at asc;
 $$;
 grant execute on function public.due_reminders() to authenticated;
+
+-- suggest_items: items to offer when adding to a given list.
+--
+-- An item's "context" is derived from the types of the lists it already
+-- belongs to: an item is suggested for the target list only if it appears in
+-- at least one accessible list whose normalized type matches the target's.
+-- Types are compared as lower(trim(...)), and null/empty collapse into a
+-- single "untyped" bucket so untyped lists share suggestions with each other.
+--
+-- Items already on the target list are excluded. Results are ordered by
+-- recency of use (last_used_at desc, then title). RLS on `items` still
+-- applies, but this also enforces the same-type rule the policies don't know
+-- about, and avoids shipping the whole catalogue to the client.
+create or replace function public.suggest_items(p_list_id uuid)
+returns setof public.items
+language sql stable security definer set search_path = public as $$
+  with target as (
+    select nullif(lower(trim(l.type)), '') as norm_type
+    from public.lists l
+    where l.id = p_list_id and public.can_access_list(p_list_id)
+  )
+  select i.*
+  from public.items i
+  where exists (
+    -- item lives in some accessible list whose type matches the target's
+    select 1
+    from public.list_items li
+    join public.lists l on l.id = li.list_id
+    cross join target t
+    where li.item_id = i.id
+      and public.can_access_list(li.list_id)
+      and nullif(lower(trim(l.type)), '') is not distinct from t.norm_type
+  )
+  and not exists (
+    -- exclude items already on the target list
+    select 1 from public.list_items li
+    where li.item_id = i.id and li.list_id = p_list_id
+  )
+  order by i.last_used_at desc nulls last, i.title asc;
+$$;
+grant execute on function public.suggest_items(uuid) to authenticated;
 
 -- ============================================================
 -- Alexa account linking (link-by-code)
