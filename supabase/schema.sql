@@ -37,9 +37,15 @@ create table public.items (
   reminder_interval_days integer
     check (reminder_interval_days is null or reminder_interval_days between 1 and 365),
   last_used_at timestamptz,
+  -- Normalized type of the last list this item was removed from. Persists the
+  -- item's "type context" after it leaves all lists, so Pick can keep
+  -- suggesting it for same-type lists only.
+  last_used_type text,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+-- Migration (existing databases): add the column if it isn't there yet.
+alter table public.items add column if not exists last_used_type text;
 
 -- 4. Junction table — many-to-many with per-list ordering
 create table public.list_items (
@@ -56,8 +62,17 @@ create index list_items_list_id_position
 
 create or replace function public.mark_item_used()
 returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_type text;
 begin
-  update public.items set last_used_at = now() where id = old.item_id;
+  select nullif(lower(trim(l.type)), '') into v_type
+  from public.lists l
+  where l.id = old.list_id;
+
+  update public.items
+    set last_used_at = now(),
+        last_used_type = v_type
+    where id = old.item_id;
   return old;
 end;
 $$;
@@ -217,16 +232,15 @@ grant execute on function public.due_reminders() to authenticated;
 
 -- suggest_items: items to offer when adding to a given list.
 --
--- An item's "context" is derived from the types of the lists it already
--- belongs to: an item is suggested for the target list only if it appears in
--- at least one accessible list whose normalized type matches the target's.
--- Types are compared as lower(trim(...)), and null/empty collapse into a
--- single "untyped" bucket so untyped lists share suggestions with each other.
+-- An item qualifies if EITHER:
+--   (a) it currently lives in another accessible list of the same type, OR
+--   (b) it was previously used (last_used_at set), the current user owns it,
+--       and it has been used in a same-type list before (or both are untyped).
+--       This covers items that were "marked as bought" and removed from their
+--       only list — they should still reappear in Pick.
 --
--- Items already on the target list are excluded. Results are ordered by
--- recency of use (last_used_at desc, then title). RLS on `items` still
--- applies, but this also enforces the same-type rule the policies don't know
--- about, and avoids shipping the whole catalogue to the client.
+-- Items already on the target list are always excluded.
+-- Results are ordered by recency of use (last_used_at desc, then title).
 create or replace function public.suggest_items(p_list_id uuid)
 returns setof public.items
 language sql stable security definer set search_path = public as $$
@@ -237,15 +251,26 @@ language sql stable security definer set search_path = public as $$
   )
   select i.*
   from public.items i
-  where exists (
-    -- item lives in some accessible list whose type matches the target's
-    select 1
-    from public.list_items li
-    join public.lists l on l.id = li.list_id
-    cross join target t
-    where li.item_id = i.id
-      and public.can_access_list(li.list_id)
-      and nullif(lower(trim(l.type)), '') is not distinct from t.norm_type
+  where (
+    -- (a) item currently lives in another accessible list of the same type
+    exists (
+      select 1
+      from public.list_items li
+      join public.lists l on l.id = li.list_id
+      cross join target t
+      where li.item_id = i.id
+        and public.can_access_list(li.list_id)
+        and nullif(lower(trim(l.type)), '') is not distinct from t.norm_type
+    )
+    or
+    -- (b) user-owned item previously removed from a same-type list (now off all
+    -- lists). Type context is read from items.last_used_type, set by the
+    -- mark_item_used trigger, since the originating list_items row is gone.
+    (
+      i.user_id = auth.uid()
+      and i.last_used_at is not null
+      and i.last_used_type is not distinct from (select norm_type from target)
+    )
   )
   and not exists (
     -- exclude items already on the target list

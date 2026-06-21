@@ -39,6 +39,10 @@ alter table public.items alter column user_id drop not null;
 alter table public.items add column if not exists reminder_enabled boolean not null default false;
 alter table public.items add column if not exists reminder_interval_days integer;
 alter table public.items add column if not exists last_used_at timestamptz;
+-- The normalized type of the last list this item was removed from. Persists the
+-- item's "type context" after it leaves all lists, so Pick can keep suggesting
+-- it for same-type lists only.
+alter table public.items add column if not exists last_used_type text;
 -- reminder_interval_days only matters when reminders are on; keep it sane.
 alter table public.items drop constraint if exists items_reminder_interval_chk;
 alter table public.items add constraint items_reminder_interval_chk
@@ -57,12 +61,21 @@ create index if not exists list_items_list_id_position
   on public.list_items(list_id, position);
 
 -- When an item is removed from a list, mark the item itself as "just used"
--- so reminder timers start counting from this moment.
+-- so reminder timers start counting from this moment. Also remember the
+-- normalized type of the list it left, so Pick can keep suggesting it for
+-- same-type lists after it no longer belongs to any list.
 create or replace function public.mark_item_used()
 returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_type text;
 begin
+  select nullif(lower(trim(l.type)), '') into v_type
+  from public.lists l
+  where l.id = old.list_id;
+
   update public.items
-    set last_used_at = now()
+    set last_used_at = now(),
+        last_used_type = v_type
     where id = old.item_id;
   return old;
 end;
@@ -231,14 +244,26 @@ language sql stable security definer set search_path = public as $$
   )
   select i.*
   from public.items i
-  where exists (
-    select 1
-    from public.list_items li
-    join public.lists l on l.id = li.list_id
-    cross join target t
-    where li.item_id = i.id
-      and public.can_access_list(li.list_id)
-      and nullif(lower(trim(l.type)), '') is not distinct from t.norm_type
+  where (
+    -- item currently lives in another accessible list of the same type
+    exists (
+      select 1
+      from public.list_items li
+      join public.lists l on l.id = li.list_id
+      cross join target t
+      where li.item_id = i.id
+        and public.can_access_list(li.list_id)
+        and nullif(lower(trim(l.type)), '') is not distinct from t.norm_type
+    )
+    or
+    -- user-owned item previously removed from a same-type list (now off all
+    -- lists). Type context is read from items.last_used_type, set by the
+    -- mark_item_used trigger, since the originating list_items row is gone.
+    (
+      i.user_id = auth.uid()
+      and i.last_used_at is not null
+      and i.last_used_type is not distinct from (select norm_type from target)
+    )
   )
   and not exists (
     select 1 from public.list_items li
