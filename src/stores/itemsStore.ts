@@ -166,6 +166,7 @@ export const useItemsStore = create<ItemsState>((set, get) => ({
 
   removeItemFromList: async (listId, itemId) => {
     const previous = get().listItems;
+    const removedListItem = previous.find((li) => li.item_id === itemId);
     set((state) => ({
       listItems: state.listItems.filter((li) => li.item_id !== itemId),
     }));
@@ -177,6 +178,11 @@ export const useItemsStore = create<ItemsState>((set, get) => ({
     if (error) {
       set({ listItems: previous });
       throw error;
+    }
+    if (removedListItem?.item) {
+      set((state) => ({
+        suggestions: [removedListItem.item, ...state.suggestions],
+      }));
     }
   },
 
