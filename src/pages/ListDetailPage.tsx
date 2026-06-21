@@ -156,7 +156,7 @@ export default function ListDetailPage() {
           <header className="mb-8">
             <p className="label-terminal mb-1">/ list</p>
             <div className="flex items-start justify-between gap-3">
-              <h1 className="font-display text-3xl sm:text-4xl text-retro-text mb-2 break-words">
+              <h1 className="font-display text-3xl sm:text-4xl text-retro-text mb-2 break-words min-w-0">
                 {list.name}
               </h1>
               <div className="flex items-center gap-2 shrink-0">
