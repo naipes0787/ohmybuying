@@ -82,8 +82,8 @@ export const ItemRow = memo(function ItemRow({
             </button>
             <button
               onClick={handleRemove}
-              aria-label={`Mark ${listItem.item.title} as bought`}
-              title="Mark as bought"
+              aria-label={`Mark ${listItem.item.title} as done`}
+              title="Mark as done"
               className="text-retro-muted hover:text-retro-green transition-colors p-1 -m-1"
               type="button"
             >
