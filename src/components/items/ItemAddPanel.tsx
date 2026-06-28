@@ -60,9 +60,10 @@ export function ItemAddPanel({
     const q = query.trim().toLowerCase();
     // The RPC already excludes items on this list and off-type items; the
     // usedItemIds guard only covers the brief optimistic window after an add.
+    // All matches are rendered — the list itself scrolls (max-h-64 below).
     const candidates = suggestions.filter((it) => !usedItemIds.has(it.id));
-    if (!q) return candidates.slice(0, 6);
-    return candidates.filter((it) => matchesQuery(it, q)).slice(0, 8);
+    if (!q) return candidates;
+    return candidates.filter((it) => matchesQuery(it, q));
   }, [suggestions, usedItemIds, query, matchesQuery]);
 
   const handleAddExisting = useCallback(
