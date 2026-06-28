@@ -77,7 +77,12 @@ export function ItemEditModal({ open, onClose, item }: ItemEditModalProps) {
   return (
     <Modal open={open} onClose={onClose} title={`Edit "${item.title}"`}>
       <form onSubmit={handleSave} className="flex flex-col gap-5">
-        <ItemForm initial={item} onChange={handleChange} autoFocusTitle />
+        <ItemForm
+          initial={item}
+          onChange={handleChange}
+          autoFocusTitle
+          lastUsedAt={item.last_used_at}
+        />
 
         {error ? (
           <div className="font-mono text-xs text-retro-magenta border-l-2 border-retro-magenta pl-3 py-1">

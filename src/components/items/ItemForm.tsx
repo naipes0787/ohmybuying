@@ -13,6 +13,11 @@ interface ItemFormProps {
   onChange: (payload: ItemFormPayload, isValid: boolean) => void;
   autoFocusTitle?: boolean;
   titlePlaceholder?: string;
+  /**
+   * When the item was last marked done. The reminder countdown starts from
+   * this moment, so a null value means the timer hasn't started yet.
+   */
+  lastUsedAt?: string | null;
 }
 
 const DEFAULT_INTERVAL = 14;
@@ -22,6 +27,7 @@ export function ItemForm({
   onChange,
   autoFocusTitle = false,
   titlePlaceholder = 'oat_milk',
+  lastUsedAt = null,
 }: ItemFormProps) {
   const [title, setTitle] = useState(initial?.title ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
@@ -113,24 +119,32 @@ export function ItemForm({
         </label>
 
         {reminderEnabled ? (
-          <div className="pl-7 flex items-center gap-3">
-            <label
-              htmlFor="reminder-interval"
-              className="font-mono text-xs text-retro-muted"
-            >
-              every
-            </label>
-            <input
-              id="reminder-interval"
-              type="number"
-              min={1}
-              max={365}
-              value={intervalDays}
-              onChange={(e) => setIntervalDays(e.target.value)}
-              className="input-terminal w-20 text-center"
-              aria-label="Reminder interval in days"
-            />
-            <span className="font-mono text-xs text-retro-muted">days</span>
+          <div className="pl-7 flex flex-col gap-2">
+            <div className="flex items-center gap-3">
+              <label
+                htmlFor="reminder-interval"
+                className="font-mono text-xs text-retro-muted"
+              >
+                every
+              </label>
+              <input
+                id="reminder-interval"
+                type="number"
+                min={1}
+                max={365}
+                value={intervalDays}
+                onChange={(e) => setIntervalDays(e.target.value)}
+                className="input-terminal w-20 text-center"
+                aria-label="Reminder interval in days"
+              />
+              <span className="font-mono text-xs text-retro-muted">days</span>
+            </div>
+            {lastUsedAt === null ? (
+              <p className="font-mono text-[11px] text-retro-cyan/80 border-l-2 border-retro-cyan/50 pl-2 py-0.5">
+                ⏳ the countdown starts once you mark this item as done — no
+                reminder fires before then
+              </p>
+            ) : null}
           </div>
         ) : null}
       </div>
