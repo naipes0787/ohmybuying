@@ -41,11 +41,18 @@ create table public.items (
   -- item's "type context" after it leaves all lists, so Pick can keep
   -- suggesting it for same-type lists only.
   last_used_type text,
+  -- The list this item was last removed from. Persists list context after the
+  -- item leaves all lists, so Pick can authorize the "orphaned item" branch by
+  -- list access (can_access_list) rather than item authorship — every user who
+  -- can see the shared list sees the same suggestions.
+  last_used_list_id uuid references public.lists(id) on delete set null,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
--- Migration (existing databases): add the column if it isn't there yet.
+-- Migration (existing databases): add the columns if they aren't there yet.
 alter table public.items add column if not exists last_used_type text;
+alter table public.items add column if not exists last_used_list_id uuid
+  references public.lists(id) on delete set null;
 
 -- 4. Junction table — many-to-many with per-list ordering
 create table public.list_items (
@@ -71,7 +78,8 @@ begin
 
   update public.items
     set last_used_at = now(),
-        last_used_type = v_type
+        last_used_type = v_type,
+        last_used_list_id = old.list_id
     where id = old.item_id;
   return old;
 end;
@@ -234,10 +242,11 @@ grant execute on function public.due_reminders() to authenticated;
 --
 -- An item qualifies if EITHER:
 --   (a) it currently lives in another accessible list of the same type, OR
---   (b) it was previously used (last_used_at set), the current user owns it,
---       and it has been used in a same-type list before (or both are untyped).
---       This covers items that were "marked as bought" and removed from their
---       only list — they should still reappear in Pick.
+--   (b) it was previously used (last_used_at set), the current user can access
+--       the list it was last removed from, and that list's type matches
+--       (or both are untyped). This covers items that were "marked as bought"
+--       and removed from their only list — they should still reappear in Pick
+--       for everyone who can access the shared list, not just the item author.
 --
 -- Items already on the target list are always excluded.
 -- Results are ordered by recency of use (last_used_at desc, then title).
@@ -263,13 +272,17 @@ language sql stable security definer set search_path = public as $$
         and nullif(lower(trim(l.type)), '') is not distinct from t.norm_type
     )
     or
-    -- (b) user-owned item previously removed from a same-type list (now off all
-    -- lists). Type context is read from items.last_used_type, set by the
-    -- mark_item_used trigger, since the originating list_items row is gone.
+    -- (b) item previously removed from a same-type list the current user can
+    -- access (now off all lists). List + type context are read from
+    -- items.last_used_list_id / last_used_type, set by the mark_item_used
+    -- trigger, since the originating list_items row is gone. Authorizing by
+    -- can_access_list (not item authorship) keeps Pick symmetric across
+    -- everyone the list is shared with.
     (
-      i.user_id = auth.uid()
-      and i.last_used_at is not null
+      i.last_used_at is not null
       and i.last_used_type is not distinct from (select norm_type from target)
+      and i.last_used_list_id is not null
+      and public.can_access_list(i.last_used_list_id)
     )
   )
   and not exists (
