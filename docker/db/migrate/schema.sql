@@ -43,6 +43,12 @@ alter table public.items add column if not exists last_used_at timestamptz;
 -- item's "type context" after it leaves all lists, so Pick can keep suggesting
 -- it for same-type lists only.
 alter table public.items add column if not exists last_used_type text;
+-- The list this item was last removed from. Persists list context after the item
+-- leaves all lists, so Pick can authorize the "orphaned item" branch by list
+-- access (can_access_list) rather than item authorship — every user who can see
+-- the shared list sees the same suggestions.
+alter table public.items add column if not exists last_used_list_id uuid
+  references public.lists(id) on delete set null;
 -- reminder_interval_days only matters when reminders are on; keep it sane.
 alter table public.items drop constraint if exists items_reminder_interval_chk;
 alter table public.items add constraint items_reminder_interval_chk
@@ -75,7 +81,8 @@ begin
 
   update public.items
     set last_used_at = now(),
-        last_used_type = v_type
+        last_used_type = v_type,
+        last_used_list_id = old.list_id
     where id = old.item_id;
   return old;
 end;
@@ -256,13 +263,17 @@ language sql stable security definer set search_path = public as $$
         and nullif(lower(trim(l.type)), '') is not distinct from t.norm_type
     )
     or
-    -- user-owned item previously removed from a same-type list (now off all
-    -- lists). Type context is read from items.last_used_type, set by the
-    -- mark_item_used trigger, since the originating list_items row is gone.
+    -- item previously removed from a same-type list the current user can access
+    -- (now off all lists). List + type context are read from
+    -- items.last_used_list_id / last_used_type, set by the mark_item_used
+    -- trigger, since the originating list_items row is gone. Authorizing by
+    -- can_access_list (not item authorship) keeps Pick symmetric across everyone
+    -- the list is shared with.
     (
-      i.user_id = auth.uid()
-      and i.last_used_at is not null
+      i.last_used_at is not null
       and i.last_used_type is not distinct from (select norm_type from target)
+      and i.last_used_list_id is not null
+      and public.can_access_list(i.last_used_list_id)
     )
   )
   and not exists (
