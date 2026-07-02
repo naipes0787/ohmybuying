@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 
-type Mode = 'signin' | 'signup';
+type Mode = 'signin' | 'signup' | 'forgot';
 
 export function AuthForm() {
   const [mode, setMode] = useState<Mode>('signin');
@@ -14,6 +14,11 @@ export function AuthForm() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const clearMessages = useCallback(() => {
+    setError(null);
+    setInfo(null);
+  }, []);
 
   const handleSubmit = useCallback(
     (e: React.FormEvent<HTMLFormElement>) => {
@@ -28,6 +33,17 @@ export function AuthForm() {
               password,
             });
             if (error) setError(error.message);
+          } else if (mode === 'forgot') {
+            const { error } = await supabase.auth.resetPasswordForEmail(email, {
+              redirectTo: `${window.location.origin}/reset-password`,
+            });
+            if (error) {
+              setError(error.message);
+            } else {
+              setInfo(
+                'If an account exists for that email, a reset link is on its way.',
+              );
+            }
           } else {
             const { data, error } = await supabase.auth.signUp({
               email,
@@ -47,19 +63,29 @@ export function AuthForm() {
     [mode, email, password],
   );
 
+  const selectMode = useCallback(
+    (next: Mode) => {
+      setMode(next);
+      clearMessages();
+    },
+    [clearMessages],
+  );
+
   const toggle = useCallback(() => {
     setMode((m) => (m === 'signin' ? 'signup' : 'signin'));
-    setError(null);
-    setInfo(null);
-  }, []);
+    clearMessages();
+  }, [clearMessages]);
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
       <div className="flex border-b border-retro-border">
-        <ModeTab active={mode === 'signin'} onClick={() => setMode('signin')}>
+        <ModeTab
+          active={mode === 'signin' || mode === 'forgot'}
+          onClick={() => selectMode('signin')}
+        >
           Sign in
         </ModeTab>
-        <ModeTab active={mode === 'signup'} onClick={() => setMode('signup')}>
+        <ModeTab active={mode === 'signup'} onClick={() => selectMode('signup')}>
           Create account
         </ModeTab>
       </div>
@@ -81,26 +107,38 @@ export function AuthForm() {
             placeholder="user@domain.io"
           />
         </div>
-        <div className="relative">
-          <Lock
-            size={14}
-            className="absolute left-0 top-[2.05rem] text-retro-muted pointer-events-none"
-          />
-          <Input
-            label="Password"
-            type="password"
-            autoComplete={
-              mode === 'signin' ? 'current-password' : 'new-password'
-            }
-            required
-            minLength={6}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="pl-6"
-            placeholder="••••••••"
-            hint={mode === 'signup' ? 'Minimum 6 characters' : undefined}
-          />
-        </div>
+        {mode === 'forgot' ? null : (
+          <div className="relative">
+            <Lock
+              size={14}
+              className="absolute left-0 top-[2.05rem] text-retro-muted pointer-events-none"
+            />
+            <Input
+              label="Password"
+              type="password"
+              autoComplete={
+                mode === 'signin' ? 'current-password' : 'new-password'
+              }
+              required
+              minLength={6}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="pl-6"
+              placeholder="••••••••"
+              hint={mode === 'signup' ? 'Minimum 6 characters' : undefined}
+            />
+          </div>
+        )}
+
+        {mode === 'signin' ? (
+          <button
+            type="button"
+            onClick={() => selectMode('forgot')}
+            className="self-end font-mono text-xs text-retro-muted hover:text-retro-cyan transition-colors"
+          >
+            Forgot password?
+          </button>
+        ) : null}
       </div>
 
       <AnimatePresence>
@@ -132,18 +170,32 @@ export function AuthForm() {
         iconRight={<ArrowRight size={14} />}
         className="w-full"
       >
-        {mode === 'signin' ? 'Enter' : 'Initialize account'}
+        {mode === 'signin'
+          ? 'Enter'
+          : mode === 'forgot'
+            ? 'Send reset link'
+            : 'Initialize account'}
       </Button>
 
-      <button
-        type="button"
-        onClick={toggle}
-        className="font-mono text-xs text-retro-muted hover:text-retro-cyan transition-colors text-center"
-      >
-        {mode === 'signin'
-          ? 'No account yet? Create one →'
-          : 'Already have an account? Sign in →'}
-      </button>
+      {mode === 'forgot' ? (
+        <button
+          type="button"
+          onClick={() => selectMode('signin')}
+          className="font-mono text-xs text-retro-muted hover:text-retro-cyan transition-colors text-center"
+        >
+          ← Back to sign in
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={toggle}
+          className="font-mono text-xs text-retro-muted hover:text-retro-cyan transition-colors text-center"
+        >
+          {mode === 'signin'
+            ? 'No account yet? Create one →'
+            : 'Already have an account? Sign in →'}
+        </button>
+      )}
     </form>
   );
 }

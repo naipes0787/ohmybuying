@@ -8,6 +8,7 @@ import AuthPage from '@/pages/AuthPage';
 
 const ListsPage = lazy(() => import('@/pages/ListsPage'));
 const ListDetailPage = lazy(() => import('@/pages/ListDetailPage'));
+const ResetPasswordPage = lazy(() => import('@/pages/ResetPasswordPage'));
 
 export function App() {
   const initialize = useAuthStore((s) => s.initialize);
@@ -28,6 +29,7 @@ export function App() {
         <Suspense fallback={<LoadingScreen />}>
           <Routes>
             <Route path="/login" element={<AuthPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route element={<ProtectedRoute />}>
               <Route path="/" element={<ListsPage />} />
               <Route path="/lists/:listId" element={<ListDetailPage />} />

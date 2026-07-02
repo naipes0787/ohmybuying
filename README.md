@@ -77,7 +77,7 @@ src/
 │   ├── layout/       # AppHeader
 │   └── ui/           # Button, Input, TextArea, Modal, Logo, LoadingScreen, ScanlineOverlay, GlowBorder, PageTransition
 ├── lib/              # supabase client, queryHelpers (Promise.all parallel fetches)
-├── pages/            # AuthPage, ListsPage, ListDetailPage (lazy-loaded)
+├── pages/            # AuthPage, ResetPasswordPage, ListsPage, ListDetailPage (lazy-loaded)
 ├── stores/           # authStore, listsStore, itemsStore (Zustand, primitive selectors)
 ├── styles/           # globals.css — CSS vars, base reset, keyframes, utility classes
 └── types/            # TypeScript interfaces
@@ -107,6 +107,22 @@ Lists can be shared by email (owner only). Members get full edit access. A few i
 - **Permanent item delete cascades.** Deleting an item from the edit modal removes it from every list it appears on. The trash/check icon on a row only removes it from the current list.
 - **`add_list_member_by_email` is a single atomic RPC.** It checks ownership, looks up the email, and inserts the membership in one transaction. The client never sees a UUID for an account it didn't already have visibility into — this is intentional, to avoid using the share flow as a generic email-existence oracle.
 
+## Password recovery
+
+Users can reset a forgotten password from the sign-in screen ("Forgot password?"):
+
+1. `AuthForm` calls `supabase.auth.resetPasswordForEmail(email, { redirectTo: <origin>/reset-password })`. The confirmation message is intentionally neutral ("If an account exists…") so the form is not an email-existence oracle.
+2. Supabase emails a recovery link back to `<origin>/reset-password`.
+3. `ResetPasswordPage` relies on `detectSessionInUrl` (enabled in `src/lib/supabase.ts`) to establish the recovery session, then calls `supabase.auth.updateUser({ password })` to set the new password and redirects to the app.
+
+**Supabase config required** — in the dashboard under **Authentication → URL Configuration → Redirect URLs**, allow-list the `/reset-password` path for every origin you use, otherwise Supabase rejects the `redirectTo` and falls back to the Site URL:
+
+- Production: `https://<your-domain>/reset-password`
+- Local dev (optional): `http://localhost:5173/reset-password` (match your Vite port)
+- Vercel previews (optional): `https://*.vercel.app/reset-password`
+
+Also set the **Site URL** to your production origin — it is the default redirect when no allowed `redirectTo` matches.
+
 ## Production deploy checklist
 
 Before pointing real users at this:
@@ -114,5 +130,6 @@ Before pointing real users at this:
 - Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in Vercel **Production** env (not committed values).
 - Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` for the `/api/alexa` function. These are server-only — never expose the service-role key to the browser.
 - Apply the latest `supabase/schema.sql` to the hosted project (SQL editor → run).
+- Configure the auth **Site URL** and add `<your-domain>/reset-password` to the **Redirect URLs** allow list so the password recovery flow works (see [Password recovery](#password-recovery)).
 - The committed `vercel.json` ships HSTS, CSP, X-Frame-Options, and Referrer-Policy. If you embed external resources (analytics, fonts), update the `Content-Security-Policy` header.
 - The committed `docker/.env` contains publicly-known dev keys for the local Docker stack only. Do not deploy these.
