@@ -138,7 +138,39 @@ Example (English): *"add eggs"* → *"Which list? You have: Groceries, Movies."*
 - **The "which list?" follow-up isn't understood** — the reply to "Which list?" is matched by the `ProvideListIntent` intent (samples like `{listName}`, `the {listName} list`, `de {listName}`). If a bare list name isn't recognized, add a matching sample to that intent and rebuild. A reply that still doesn't match any of your list names re-asks rather than erroring; the pending add/remove is kept in the session until you name a valid list or the session ends.
 - **New sample utterances / new intents / the Fallback handler don't take effect** — interaction-model changes require a rebuild in the Alexa console (paste the updated `interaction-models/*.json`, then **Save Model → Build Model** per locale), and handler changes in `api/alexa.ts` require a Vercel redeploy. The repo files are not auto-synced to Amazon.
 - **Endpoint validation fails** — Amazon requires HTTPS with a valid cert and a verified `signature` header on every request. The Vercel handler verifies the signature; check the function logs.
-- **Skill submission rejected** — Amazon's certification requires terms-of-use and privacy-policy URLs. Update the placeholders in `skill.json` to point at your actual policy pages.
+- **Skill submission rejected for policy URLs** — certification requires working
+  privacy-policy and terms-of-use URLs. These are served as static pages
+  (`public/privacy.html`, `public/terms.html`) at `/privacy` and `/terms` via rewrites
+  in `vercel.json`, and referenced in `skill.json` → `privacyAndCompliance`. Before
+  submitting, replace the `[YOUR NAME]`, `[CONTACT_EMAIL]`, and `[LAST_UPDATED]`
+  placeholders in both HTML files.
+- **Submission rejected for example phrases** — certifiers speak the manifest's
+  `examplePhrases` verbatim. They must all work; the item+list-in-one-breath form does
+  not (see the two-turn dialog note). Run every example phrase in the simulator first.
+
+## Submitting for certification
+
+Certification makes the skill available to anyone (not just your own account). Before
+submitting:
+
+1. **Fill in the legal pages.** Edit `public/privacy.html` and `public/terms.html`,
+   replacing `[YOUR NAME]`, `[CONTACT_EMAIL]`, `[LAST_UPDATED]`. These are honest
+   templates, not lawyer-reviewed documents — review them yourself before publishing.
+2. **Deploy** the app to Vercel and confirm `https://<your-domain>/privacy` and
+   `/terms` load the static pages (HTTP 200, `content-type: text/html`, the policy
+   text — not the app shell).
+3. **Rebuild both locales** in the Alexa console (paste `interaction-models/*.json`,
+   Save Model → Build Model per locale).
+4. **Update the manifest** — paste `skill.json` (or `ask deploy`). It carries the
+   working `examplePhrases`, the `testingInstructions`, the PNG icon URIs
+   (`/icons/icon-108.png`, `/icons/icon-512.png`), and the privacy/terms URLs.
+5. **Upload the PNG icons** on the Distribution page if prompted
+   (`alexa/icon-108.png`, `alexa/icon-512.png`).
+6. **Run every `examplePhrases` entry** in the Test simulator for both `en-US` and
+   `es-ES` and confirm each returns a correct skill response.
+7. **Verify the certifier's path** by following `testingInstructions` end-to-end
+   yourself (link with a fresh code, then the two-step add flow).
+8. Submit via **Distribution → Availability → Submit for review**.
 
 ## What's deliberately out of scope here
 

@@ -4,33 +4,33 @@
       "locales": {
         "en-US": {
           "summary": "Voice control for your ohMyBuying shopping lists.",
-          "description": "Add, remove, and read items on your ohMyBuying shopping lists with your voice. Link your account with a one-time code from the ohMyBuying app, then say things like 'Alexa, ask oh my buying to add eggs to my groceries list'.",
+          "description": "Add, remove, and read items on your ohMyBuying shopping lists with your voice. Link your account with a one-time code from the ohMyBuying app, then say things like 'Alexa, open oh my buying' and then 'add eggs'. If you have more than one list, the skill asks which one and you answer with the list name.",
           "examplePhrases": [
             "Alexa, open oh my buying",
-            "Alexa, ask oh my buying to add eggs to my groceries list",
-            "Alexa, ask oh my buying what is on my groceries list"
+            "Alexa, ask oh my buying to add eggs",
+            "Alexa, ask oh my buying what is on groceries"
           ],
           "name": "ohMyBuying",
-          "smallIconUri": "https://ohmybuying.vercel.app/icons/icon-192.svg",
-          "largeIconUri": "https://ohmybuying.vercel.app/icons/icon-512.svg",
+          "smallIconUri": "https://ohmybuying.vercel.app/icons/icon-108.png",
+          "largeIconUri": "https://ohmybuying.vercel.app/icons/icon-512.png",
           "keywords": ["shopping", "list", "groceries", "todo"]
         },
         "es-ES": {
           "summary": "Control por voz de tus listas de compras de ohMyBuying.",
-          "description": "Añade, quita y lee elementos de tus listas de compras de ohMyBuying con la voz. Vincula tu cuenta con un código de un solo uso desde la aplicación, y luego di cosas como 'Alexa, pídele a oh my buying que añada huevos a mi lista de compras'.",
+          "description": "Añade, quita y lee elementos de tus listas de compras de ohMyBuying con la voz. Vincula tu cuenta con un código de un solo uso desde la aplicación, y luego di 'Alexa, abre oh my buying' y después 'añade huevos'. Si tienes más de una lista, la skill te pregunta cuál y respondes con el nombre de la lista.",
           "examplePhrases": [
             "Alexa, abre oh my buying",
-            "Alexa, pídele a oh my buying que añada huevos a mi lista de compras",
-            "Alexa, pregúntale a oh my buying qué hay en mi lista de compras"
+            "Alexa, pídele a oh my buying que añada huevos",
+            "Alexa, pregúntale a oh my buying qué hay en compras"
           ],
           "name": "ohMyBuying",
-          "smallIconUri": "https://ohmybuying.vercel.app/icons/icon-192.svg",
-          "largeIconUri": "https://ohmybuying.vercel.app/icons/icon-512.svg",
+          "smallIconUri": "https://ohmybuying.vercel.app/icons/icon-108.png",
+          "largeIconUri": "https://ohmybuying.vercel.app/icons/icon-512.png",
           "keywords": ["compras", "lista", "supermercado"]
         }
       },
       "isAvailableWorldwide": false,
-      "testingInstructions": "Sign up at https://ohmybuying.vercel.app, generate an Alexa link code from the dashboard, then say 'Alexa, ask oh my buying to link with code <CODE>'. After linking, you can add and remove items.",
+      "testingInstructions": "1) Sign up at https://ohmybuying.vercel.app and create at least one list (e.g. 'Groceries'). 2) In the app header, open the Alexa panel and tap 'Generate code' to get a 6-character code. 3) Say 'Alexa, ask oh my buying to link with code <CODE>' — you should hear 'Your account is now linked.' Codes are single-use and expire in 10 minutes; generate a fresh one if needed. 4) Add an item with the two-step flow: say 'Alexa, open oh my buying', then 'add eggs'. If the account has more than one list the skill asks 'Which list?'; answer with a carrier phrase such as 'the groceries list'. If only one list exists it is used automatically. 5) Read it back: 'Alexa, ask oh my buying what is on groceries'. Note: naming the item and the list in a single sentence is not supported because both are AMAZON.SearchQuery slots; the item comes first and the list is confirmed in a follow-up turn.",
       "category": "ORGANIZERS_AND_ASSISTANTS",
       "distributionCountries": ["US", "ES"]
     },
