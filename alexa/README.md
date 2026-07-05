@@ -54,17 +54,74 @@ ask deploy
 3. Say: *"Alexa, ask oh my buying to link with code XXXXXX"* using the 6 characters.
 4. After "Your account is now linked" you can use any of the supported phrases.
 
+> The link is per **Alexa user**. The developer-console Test tab is one Alexa
+> user; a physical Echo is another. Linking in the simulator does **not** link
+> your Echo — you generate a fresh code and link again on the device (see below).
+
+## Use it on your own Echo device
+
+A skill in the **Development** stage is automatically available on Echo devices
+registered to the **same Amazon account** as the developer console — no
+publishing required. Steps:
+
+1. **Same Amazon account.** Confirm your Echo is signed in to the same account as
+   the Alexa Developer Console: **Alexa app → More → Settings → Account** should
+   show your developer email. (A device on a different/family account won't see the skill.)
+2. **Testing enabled.** In the console **Test** tab, the toggle must be
+   **Development** (not Off).
+3. **Locale match.** Your Echo's language must be one you built. Check
+   **Alexa app → Settings → Device Settings → [your Echo] → Language** — set it to
+   Spanish (ES) or English (US).
+4. **Enable the skill.** **Alexa app → More → Skills & Games → Your Skills → Dev
+   tab** → open `ohMyBuying` → **Enable to Use** (dev skills often auto-enable on
+   first invocation, so you can also just try step 6).
+5. **Link this device.** Generate a fresh code in the ohMyBuying web app, then on
+   the Echo: *"Alexa, abre oh my buying"* → *"vincular con código [código]"* →
+   wait for *"Tu cuenta está vinculada."* (This is a separate link from the
+   simulator's.)
+6. **Use it.** *"Alexa, abre oh my buying"* → *"añade huevos"* → *"la lista compras"*.
+
+**Scope:** because the skill is in Development, it works **only** on Echo devices
+on your own developer account. Letting other people (other Amazon accounts) use it
+requires submitting for **certification and publishing** — which additionally needs
+real `/privacy` and `/terms` pages (currently placeholders; see *What's
+deliberately out of scope*). For personal use, no publishing is needed.
+
+## Invocation — how to talk to the skill
+
+**Prefer the two-step (session) flow.** It is the most reliable way to reach the
+skill and cannot be intercepted by Amazon's native features:
+
+1. *"Alexa, open oh my buying"* (ES: *"Alexa, abre oh my buying"*) — wait for the welcome.
+2. Then say the command with no wake word or invocation name: *"add eggs"* / *"añade huevos"*.
+
+**One-shot form** works too but competes with Amazon's built-in Shopping List
+for "add"-style phrases, so it is less reliable:
+
+- *"Alexa, ask oh my buying to add eggs"* (ES: *"Alexa, pídele a oh my buying que añada huevos"*).
+- The invocation name (`oh my buying`) must sit **directly before** the action, and you must include the "Alexa, ask … to" / "pídele a … que" carrier. Even then, on a real device with Amazon Lists enabled, Amazon may win the phrase. Less-contested verbs like *"I need eggs"* / *"necesito huevos"* route more cleanly than "add".
+
+If Alexa answers with *"I've put eggs on your shopping list"* (its own generic
+voice) instead of the skill's *"Added eggs to …"*, the native Shopping List
+intercepted the request — use the two-step flow above.
+
 ## Supported phrases
 
-**English:**
-- "Alexa, ask oh my buying to add eggs to my groceries list."
-- "Alexa, ask oh my buying to remove milk from my groceries list."
-- "Alexa, ask oh my buying what is on my groceries list."
+You cannot name the item and the list in one breath — `item` and `listName` are
+both `AMAZON.SearchQuery` (phrase) slots, and Alexa forbids two phrase slots in
+one utterance. Say the item first; if you have more than one list the skill asks
+*"Which list?"* and you answer with a short carrier phrase (see the
+"Choosing a list is a two-turn dialog" note below).
 
-**Español:**
-- "Alexa, pídele a oh my buying que añada huevos a mi lista de compras."
-- "Alexa, pídele a oh my buying que quite leche de mi lista de compras."
-- "Alexa, pregúntale a oh my buying qué hay en mi lista de compras."
+**English (inside a session, after "open oh my buying"):**
+- "add eggs" → "the groceries list"
+- "remove milk" → "from groceries"
+- "what is on groceries"
+
+**Español (dentro de una sesión, tras "abre oh my buying"):**
+- "añade huevos" → "la lista compras"
+- "quita leche" → "de compras"
+- "qué hay en compras"
 
 **Choosing a list is a two-turn dialog.** You cannot name both the item and the list in one breath: `item` and `listName` are both `AMAZON.SearchQuery` ("phrase") slots, and Alexa forbids two phrase slots in a single utterance. List names are also user-created, so they can't be a fixed custom slot. Instead:
 
