@@ -11,8 +11,7 @@
         {
           "name": "AddItemIntent",
           "slots": [
-            { "name": "item", "type": "AMAZON.SearchQuery" },
-            { "name": "listName", "type": "AMAZON.SearchQuery" }
+            { "name": "item", "type": "AMAZON.SearchQuery" }
           ],
           "samples": [
             "add {item}",
@@ -25,8 +24,7 @@
         {
           "name": "RemoveItemIntent",
           "slots": [
-            { "name": "item", "type": "AMAZON.SearchQuery" },
-            { "name": "listName", "type": "AMAZON.SearchQuery" }
+            { "name": "item", "type": "AMAZON.SearchQuery" }
           ],
           "samples": [
             "remove {item}",
@@ -59,6 +57,22 @@
             "link my account with code {code}",
             "use code {code}",
             "my code is {code}"
+          ]
+        },
+        {
+          "name": "ProvideListIntent",
+          "slots": [
+            { "name": "listName", "type": "AMAZON.SearchQuery" }
+          ],
+          "samples": [
+            "the {listName} list",
+            "the {listName} one",
+            "it's {listName}",
+            "on {listName}",
+            "to {listName}",
+            "from {listName}",
+            "my {listName} list",
+            "list {listName}"
           ]
         }
       ],

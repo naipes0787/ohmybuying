@@ -47,11 +47,12 @@ function localeOf(handlerInput: HandlerInput): Locale {
 const STR = {
   en: {
     welcome:
-      'Welcome to oh My Buying. You can say: add eggs to my groceries list. What would you like to do?',
+      'Welcome to oh My Buying. You can say: add eggs to my list. What would you like to do?',
     needLink:
       'Your account is not linked yet. Open the oh My Buying app, generate a link code, then say: link with code, followed by the six character code.',
     askWhat: 'What would you like to do?',
     askWhichList: (available: string) => `Which list? You have: ${available}.`,
+    noPending: 'Which list? First tell me what to add or remove.',
     addOk: (item: string, list: string) => `Added ${item} to ${list}.`,
     removeOk: (item: string, list: string) =>
       `Removed ${item} from ${list}.`,
@@ -65,7 +66,9 @@ const STR = {
     notInList: (item: string, list: string) =>
       `${item} is not on ${list}.`,
     help:
-      'Try saying: add eggs, or add eggs to groceries, or what is on my groceries list.',
+      'Try saying: add eggs, or add eggs to groceries, or what is on my list.',
+    fallback:
+      "I didn't catch that. Try saying: add eggs to my list, or what is on my list.",
     bye: 'Goodbye!',
     error: 'Sorry, something went wrong. Please try again.',
     linkOk: 'Your account is now linked. You can ask me to add items.',
@@ -74,11 +77,12 @@ const STR = {
   },
   es: {
     welcome:
-      'Bienvenido a oh My Buying. Puedes decir: añade huevos a mi lista de compras. ¿Qué quieres hacer?',
+      'Bienvenido a oh My Buying. Puedes decir: añade huevos a mi lista. ¿Qué quieres hacer?',
     needLink:
       'Tu cuenta no está vinculada. Abre la aplicación oh My Buying, genera un código de vinculación, y di: vincular con código, seguido del código de seis caracteres.',
     askWhat: '¿Qué quieres hacer?',
     askWhichList: (available: string) => `¿En qué lista? Tienes: ${available}.`,
+    noPending: '¿En qué lista? Primero dime qué añadir o quitar.',
     addOk: (item: string, list: string) => `Añadí ${item} a ${list}.`,
     removeOk: (item: string, list: string) =>
       `Quité ${item} de ${list}.`,
@@ -92,7 +96,9 @@ const STR = {
     notInList: (item: string, list: string) =>
       `${item} no está en ${list}.`,
     help:
-      'Prueba diciendo: añade huevos, o añade huevos a compras, o qué hay en mi lista de compras.',
+      'Prueba diciendo: añade huevos, o añade huevos a compras, o qué hay en mi lista.',
+    fallback:
+      'No te entendí. Prueba diciendo: añade huevos a mi lista, o qué hay en mi lista.',
     bye: '¡Adiós!',
     error: 'Lo siento, algo salió mal. Inténtalo de nuevo.',
     linkOk: 'Tu cuenta está vinculada. Ya puedes pedirme añadir cosas.',
@@ -267,74 +273,132 @@ const LaunchRequestHandler: RequestHandler = {
   },
 };
 
+// A pending action stashed in the session when the user names an item but no
+// list, and has more than one list — we ask "which list?" and finish it once
+// ProvideListIntent supplies the name on the next turn.
+type PendingAction = 'add' | 'remove' | 'list';
+interface Pending {
+  action: PendingAction;
+  item?: string;
+}
+
+function setPending(input: HandlerInput, pending: Pending): void {
+  input.attributesManager.setSessionAttributes({ pending });
+}
+function getPending(input: HandlerInput): Pending | null {
+  const attrs = input.attributesManager.getSessionAttributes() as {
+    pending?: Pending;
+  };
+  return attrs.pending ?? null;
+}
+function clearPending(input: HandlerInput): void {
+  input.attributesManager.setSessionAttributes({});
+}
+
+// Run an already-resolved action against a resolved list and speak the result.
+async function runAction(
+  input: HandlerInput,
+  userId: string,
+  action: PendingAction,
+  item: string | undefined,
+  list: ListRow,
+) {
+  const t = STR[localeOf(input)];
+  try {
+    if (action === 'add') {
+      const itemId = await findOrCreateItem(userId, item!);
+      await addItemToList(list.id, itemId);
+      return speak(input, t.addOk(item!, list.name), false);
+    }
+    if (action === 'remove') {
+      const { removed, itemTitle } = await removeItemFromList(list.id, item!);
+      if (!removed) return speak(input, t.notInList(item!, list.name), false);
+      return speak(input, t.removeOk(itemTitle ?? item!, list.name), false);
+    }
+    const items = await summariseList(list.id);
+    if (items.length === 0) return speak(input, t.listEmpty(list.name), false);
+    return speak(input, t.listSummary(list.name, items.join(', ')), false);
+  } catch (err) {
+    console.error(`${action} failed`, err);
+    return speak(input, t.error, false);
+  }
+}
+
+// Shared entry point for the three list-scoped intents. Resolves the list;
+// if it's ambiguous (no name spoken, >1 list) it stashes the action and asks.
+async function handleListScopedIntent(
+  input: HandlerInput,
+  action: PendingAction,
+  item: string | undefined,
+) {
+  const t = STR[localeOf(input)];
+  const alexaUserId = getUserId(input.requestEnvelope);
+  const userId = await resolveUser(alexaUserId);
+  if (!userId) return speak(input, t.needLink);
+
+  if ((action === 'add' || action === 'remove') && !item) {
+    return speak(input, t.askWhat);
+  }
+
+  const listSlot = getSlotValue(input.requestEnvelope, 'listName') ?? undefined;
+  const { list, available } = await resolveList(userId, listSlot);
+  if (!list) {
+    if (available.length === 0) return speak(input, t.noLists);
+    // Ambiguous: no usable list. Remember what we were doing so the next
+    // utterance (ProvideListIntent) can finish it.
+    if (!listSlot) {
+      setPending(input, { action, item });
+      return speak(input, t.askWhichList(available.map((l) => l.name).join(', ')));
+    }
+    setPending(input, { action, item });
+    return speak(input, t.noSuchList(listSlot, available.map((l) => l.name).join(', ')));
+  }
+  clearPending(input);
+  return runAction(input, userId, action, item, list);
+}
+
 const AddItemIntentHandler: RequestHandler = {
   canHandle: (input) =>
     getRequestType(input.requestEnvelope) === 'IntentRequest' &&
     getIntentName(input.requestEnvelope) === 'AddItemIntent',
-  async handle(input) {
-    const t = STR[localeOf(input)];
-    const alexaUserId = getUserId(input.requestEnvelope);
-    const userId = await resolveUser(alexaUserId);
-    if (!userId) return speak(input, t.needLink);
-
-    const itemSlot = getSlotValue(input.requestEnvelope, 'item');
-    if (!itemSlot) return speak(input, t.askWhat);
-
-    const listSlot = getSlotValue(input.requestEnvelope, 'listName') ?? undefined;
-    const { list, available } = await resolveList(userId, listSlot);
-    if (!list) {
-      if (available.length === 0) return speak(input, t.noLists);
-      if (!listSlot) return speak(input, t.askWhichList(available.map((l) => l.name).join(', ')));
-      return speak(input, t.noSuchList(listSlot, available.map((l) => l.name).join(', ')));
-    }
-    try {
-      const itemId = await findOrCreateItem(userId, itemSlot);
-      await addItemToList(list.id, itemId);
-      return speak(input, t.addOk(itemSlot, list.name), false);
-    } catch (err) {
-      console.error('AddItem failed', err);
-      return speak(input, t.error, false);
-    }
-  },
+  handle: (input) =>
+    handleListScopedIntent(
+      input,
+      'add',
+      getSlotValue(input.requestEnvelope, 'item'),
+    ),
 };
 
 const RemoveItemIntentHandler: RequestHandler = {
   canHandle: (input) =>
     getRequestType(input.requestEnvelope) === 'IntentRequest' &&
     getIntentName(input.requestEnvelope) === 'RemoveItemIntent',
-  async handle(input) {
-    const t = STR[localeOf(input)];
-    const alexaUserId = getUserId(input.requestEnvelope);
-    const userId = await resolveUser(alexaUserId);
-    if (!userId) return speak(input, t.needLink);
-
-    const itemSlot = getSlotValue(input.requestEnvelope, 'item');
-    if (!itemSlot) return speak(input, t.askWhat);
-
-    const listSlot = getSlotValue(input.requestEnvelope, 'listName') ?? undefined;
-    const { list, available } = await resolveList(userId, listSlot);
-    if (!list) {
-      if (available.length === 0) return speak(input, t.noLists);
-      if (!listSlot) return speak(input, t.askWhichList(available.map((l) => l.name).join(', ')));
-      return speak(input, t.noSuchList(listSlot, available.map((l) => l.name).join(', ')));
-    }
-    try {
-      const { removed, itemTitle } = await removeItemFromList(list.id, itemSlot);
-      if (!removed) return speak(input, t.notInList(itemSlot, list.name), false);
-      return speak(input, t.removeOk(itemTitle ?? itemSlot, list.name), false);
-    } catch (err) {
-      console.error('RemoveItem failed', err);
-      return speak(input, t.error, false);
-    }
-  },
+  handle: (input) =>
+    handleListScopedIntent(
+      input,
+      'remove',
+      getSlotValue(input.requestEnvelope, 'item'),
+    ),
 };
 
 const ListItemsIntentHandler: RequestHandler = {
   canHandle: (input) =>
     getRequestType(input.requestEnvelope) === 'IntentRequest' &&
     getIntentName(input.requestEnvelope) === 'ListItemsIntent',
+  handle: (input) => handleListScopedIntent(input, 'list', undefined),
+};
+
+// Second turn of the "which list?" dialog: the user just spoke a list name.
+// Resolve the pending action against it. This intent only carries a listName.
+const ProvideListIntentHandler: RequestHandler = {
+  canHandle: (input) =>
+    getRequestType(input.requestEnvelope) === 'IntentRequest' &&
+    getIntentName(input.requestEnvelope) === 'ProvideListIntent',
   async handle(input) {
     const t = STR[localeOf(input)];
+    const pending = getPending(input);
+    if (!pending) return speak(input, t.noPending);
+
     const alexaUserId = getUserId(input.requestEnvelope);
     const userId = await resolveUser(alexaUserId);
     if (!userId) return speak(input, t.needLink);
@@ -343,12 +407,14 @@ const ListItemsIntentHandler: RequestHandler = {
     const { list, available } = await resolveList(userId, listSlot);
     if (!list) {
       if (available.length === 0) return speak(input, t.noLists);
-      if (!listSlot) return speak(input, t.askWhichList(available.map((l) => l.name).join(', ')));
-      return speak(input, t.noSuchList(listSlot, available.map((l) => l.name).join(', ')));
+      // Still couldn't match — keep the pending action and ask again.
+      return speak(
+        input,
+        t.noSuchList(listSlot ?? '', available.map((l) => l.name).join(', ')),
+      );
     }
-    const items = await summariseList(list.id);
-    if (items.length === 0) return speak(input, t.listEmpty(list.name), false);
-    return speak(input, t.listSummary(list.name, items.join(', ')), false);
+    clearPending(input);
+    return runAction(input, userId, pending.action, pending.item, list);
   },
 };
 
@@ -378,6 +444,15 @@ const HelpIntentHandler: RequestHandler = {
     getIntentName(input.requestEnvelope) === 'AMAZON.HelpIntent',
   handle(input) {
     return speak(input, STR[localeOf(input)].help);
+  },
+};
+
+const FallbackIntentHandler: RequestHandler = {
+  canHandle: (input) =>
+    getRequestType(input.requestEnvelope) === 'IntentRequest' &&
+    getIntentName(input.requestEnvelope) === 'AMAZON.FallbackIntent',
+  handle(input) {
+    return speak(input, STR[localeOf(input)].fallback);
   },
 };
 
@@ -413,8 +488,10 @@ const skill = SkillBuilders.custom()
     AddItemIntentHandler,
     RemoveItemIntentHandler,
     ListItemsIntentHandler,
+    ProvideListIntentHandler,
     LinkWithCodeIntentHandler,
     HelpIntentHandler,
+    FallbackIntentHandler,
     StopIntentHandler,
     SessionEndedRequestHandler,
   )

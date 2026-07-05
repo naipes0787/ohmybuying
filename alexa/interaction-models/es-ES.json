@@ -11,8 +11,7 @@
         {
           "name": "AddItemIntent",
           "slots": [
-            { "name": "item", "type": "AMAZON.SearchQuery" },
-            { "name": "listName", "type": "AMAZON.SearchQuery" }
+            { "name": "item", "type": "AMAZON.SearchQuery" }
           ],
           "samples": [
             "añade {item}",
@@ -26,8 +25,7 @@
         {
           "name": "RemoveItemIntent",
           "slots": [
-            { "name": "item", "type": "AMAZON.SearchQuery" },
-            { "name": "listName", "type": "AMAZON.SearchQuery" }
+            { "name": "item", "type": "AMAZON.SearchQuery" }
           ],
           "samples": [
             "quita {item}",
@@ -60,6 +58,22 @@
             "vincula mi cuenta con el código {code}",
             "usa el código {code}",
             "mi código es {code}"
+          ]
+        },
+        {
+          "name": "ProvideListIntent",
+          "slots": [
+            { "name": "listName", "type": "AMAZON.SearchQuery" }
+          ],
+          "samples": [
+            "la lista {listName}",
+            "la de {listName}",
+            "mi lista de {listName}",
+            "es {listName}",
+            "en {listName}",
+            "a {listName}",
+            "de {listName}",
+            "lista {listName}"
           ]
         }
       ],

@@ -66,11 +66,20 @@ ask deploy
 - "Alexa, pídele a oh my buying que quite leche de mi lista de compras."
 - "Alexa, pregúntale a oh my buying qué hay en mi lista de compras."
 
+**Choosing a list is a two-turn dialog.** You cannot name both the item and the list in one breath: `item` and `listName` are both `AMAZON.SearchQuery` ("phrase") slots, and Alexa forbids two phrase slots in a single utterance. List names are also user-created, so they can't be a fixed custom slot. Instead:
+
+- If you have **one** list, it's used automatically — just say `add eggs`.
+- If you have **more than one** and don't name a list, the skill asks **"Which list?"** and remembers what you were doing. Answer with a short carrier phrase around the list name — *"the movies list"*, *"to groceries"*, *"it's groceries"* (EN) / *"la lista compras"*, *"de compras"*, *"es compras"* (ES). A **bare** one-word answer won't match (Alexa forbids a sample that is only a phrase slot), so include one of those small carrier words. This is handled by the `ProvideListIntent` intent plus session attributes in `api/alexa.ts`.
+
+Example (English): *"add eggs"* → *"Which list? You have: Groceries, Movies."* → *"the groceries list"* → *"Added eggs to Groceries."*
+
 ## Troubleshooting
 
 - **"Generate code" fails with a 404 / `PostgREST error=42883` (`function gen_random_bytes(integer) does not exist`)** — the hosted Supabase project is missing the `pgcrypto` extension that `issue_alexa_link_code()` uses to mint codes. Run `create extension if not exists pgcrypto with schema extensions;` in the SQL editor (it's now included at the top of `supabase/schema.sql`). The function calls `extensions.gen_random_bytes(...)` schema-qualified, because it runs with `search_path = public` and pgcrypto lives in the `extensions` schema. Note the DB error surfaces as a bare `42883` — inspect the full JSON response body (browser Network tab) to see the real `function ... does not exist` message.
 - **"Your account is not linked yet"** — generate a fresh code in the app and try again. Codes expire in 10 minutes and are single-use.
 - **"I couldn't find a list called X"** — the spoken name is matched case-insensitively, with diacritics stripped, and supports prefix/contains. If your list is named with a long phrase, add the spoken form to the `ListName` slot's `values` array in the interaction model and rebuild.
+- **The "which list?" follow-up isn't understood** — the reply to "Which list?" is matched by the `ProvideListIntent` intent (samples like `{listName}`, `the {listName} list`, `de {listName}`). If a bare list name isn't recognized, add a matching sample to that intent and rebuild. A reply that still doesn't match any of your list names re-asks rather than erroring; the pending add/remove is kept in the session until you name a valid list or the session ends.
+- **New sample utterances / new intents / the Fallback handler don't take effect** — interaction-model changes require a rebuild in the Alexa console (paste the updated `interaction-models/*.json`, then **Save Model → Build Model** per locale), and handler changes in `api/alexa.ts` require a Vercel redeploy. The repo files are not auto-synced to Amazon.
 - **Endpoint validation fails** — Amazon requires HTTPS with a valid cert and a verified `signature` header on every request. The Vercel handler verifies the signature; check the function logs.
 - **Skill submission rejected** — Amazon's certification requires terms-of-use and privacy-policy URLs. Update the placeholders in `skill.json` to point at your actual policy pages.
 
