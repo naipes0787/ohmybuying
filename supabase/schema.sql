@@ -1,6 +1,14 @@
 -- ohMyBuying — Supabase schema
 -- Run this in Supabase SQL Editor on a fresh project.
 
+-- 0. Extensions.
+-- pgcrypto provides gen_random_bytes(), used to mint Alexa link codes.
+-- On Supabase it installs into the `extensions` schema, so calls to it are
+-- schema-qualified below (functions set `search_path = public`, which would
+-- not otherwise see it). gen_random_uuid() is core in Postgres 13+ and needs
+-- no extension.
+create extension if not exists pgcrypto with schema extensions;
+
 -- 1. Profiles mirror auth.users
 create table public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -326,8 +334,11 @@ create policy "alexa_links own read"
 create policy "alexa_links own delete"
   on public.alexa_links for delete using (user_id = auth.uid());
 
+-- Returns json (a single {code, expires_at} object) rather than a table row.
+-- gen_random_bytes is schema-qualified (extensions.*) because this function
+-- runs with search_path = public and pgcrypto lives in the extensions schema.
 create or replace function public.issue_alexa_link_code()
-returns table (code text, expires_at timestamptz)
+returns json
 language plpgsql security definer set search_path = public as $$
 declare
   v_user_id uuid := auth.uid();
@@ -336,11 +347,11 @@ declare
 begin
   if v_user_id is null then raise exception 'not authenticated'; end if;
   delete from public.alexa_link_codes where user_id = v_user_id and redeemed_at is null;
-  v_code := upper(substring(replace(encode(gen_random_bytes(8), 'base64'), '/', '') from 1 for 6));
+  v_code := upper(substring(replace(encode(extensions.gen_random_bytes(8), 'base64'), '/', '') from 1 for 6));
   v_code := translate(v_code, '0O1I+/', 'XKJLMN');
   insert into public.alexa_link_codes (code, user_id, expires_at)
   values (v_code, v_user_id, v_expires);
-  return query select v_code, v_expires;
+  return json_build_object('code', v_code, 'expires_at', v_expires);
 end;
 $$;
 grant execute on function public.issue_alexa_link_code() to authenticated;

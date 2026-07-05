@@ -68,6 +68,7 @@ ask deploy
 
 ## Troubleshooting
 
+- **"Generate code" fails with a 404 / `PostgREST error=42883` (`function gen_random_bytes(integer) does not exist`)** — the hosted Supabase project is missing the `pgcrypto` extension that `issue_alexa_link_code()` uses to mint codes. Run `create extension if not exists pgcrypto with schema extensions;` in the SQL editor (it's now included at the top of `supabase/schema.sql`). The function calls `extensions.gen_random_bytes(...)` schema-qualified, because it runs with `search_path = public` and pgcrypto lives in the `extensions` schema. Note the DB error surfaces as a bare `42883` — inspect the full JSON response body (browser Network tab) to see the real `function ... does not exist` message.
 - **"Your account is not linked yet"** — generate a fresh code in the app and try again. Codes expire in 10 minutes and are single-use.
 - **"I couldn't find a list called X"** — the spoken name is matched case-insensitively, with diacritics stripped, and supports prefix/contains. If your list is named with a long phrase, add the spoken form to the `ListName` slot's `values` array in the interaction model and rebuild.
 - **Endpoint validation fails** — Amazon requires HTTPS with a valid cert and a verified `signature` header on every request. The Vercel handler verifies the signature; check the function logs.
